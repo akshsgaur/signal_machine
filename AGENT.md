@@ -23,7 +23,7 @@ markdown brief that tells a PM whether to pursue, deprioritize, or investigate t
 | Backend | FastAPI 0.115, Python 3.11, uvicorn |
 | Agents | LangGraph 0.2.74, LangChain 1.0, `langchain.agents.create_agent` |
 | MCP | `langchain-mcp-adapters`, `MultiServerMCPClient` |
-| AI model | `claude-sonnet-4-6` via `langchain-anthropic` |
+| AI model | `gpt-4o-mini` via `langchain-openai` |
 | Database | Supabase (Postgres), `supabase-py` 2.7 |
 | Storage | Local disk at `backend/storage/files/{run_id}/` |
 
@@ -116,7 +116,7 @@ run_signal_pipeline(run_id, user_id, hypothesis, product_area)
   │
   ├── 1. get_all_tokens(user_id)                     # Supabase → {integration: token}
   ├── 2. asyncio.gather(get_tools_for_client × 4)    # MCP tool discovery, return_exceptions=True
-  ├── 3. init_chat_model("anthropic:claude-sonnet-4-6")
+  ├── 3. init_chat_model("gpt-4o-mini")
   │
   ├── Phase 1: ThreadPoolExecutor(max_workers=4)
   │   ├── _run_agent("behavioral", ...) → behavioral/amplitude_signals.md
@@ -279,7 +279,7 @@ prevents agents from looping after completing their single output.
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-service-role-key          # service role, not anon
-ANTHROPIC_API_KEY=your-anthropic-key
+OPENAI_API_KEY=your-openai-key
 PRODUCTBOARD_SIDECAR_PATH=/path/to/index.js  # optional, defaults to /opt/productboard-mcp/index.js
 FILES_STORAGE_ROOT=/custom/path              # optional, overrides default storage/files/
 ```

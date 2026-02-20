@@ -44,7 +44,7 @@ The frontend streams agent completions via SSE so you watch the pipeline run in 
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-markdown |
 | Backend | FastAPI 0.115, Python 3.11, uvicorn |
 | Agents | LangGraph 0.2.74, LangChain 1.0 (`create_agent`) |
-| Model | Claude Sonnet 4.6 (`claude-sonnet-4-6`) via langchain-anthropic |
+| Model | GPT-4o mini (`gpt-4o-mini`) via langchain-openai |
 | MCP | langchain-mcp-adapters, MultiServerMCPClient |
 | Database | Supabase (Postgres) |
 | Streaming | Server-Sent Events (SSE), disk-poll architecture |
@@ -116,14 +116,14 @@ python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activa
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env — fill in SUPABASE_URL, SUPABASE_KEY, ANTHROPIC_API_KEY
+# Edit .env — fill in SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY
 ```
 
 **`backend/.env`**
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-service-role-key
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 # Optional:
 PRODUCTBOARD_SIDECAR_PATH=/path/to/productboard-mcp/index.js
 ```
@@ -320,10 +320,10 @@ signal/
 The model is set in `run_signal_pipeline()`:
 
 ```python
-model = init_chat_model(model="anthropic:claude-sonnet-4-6", temperature=0.0)
+model = init_chat_model(model="gpt-4o-mini", temperature=0.0)
 ```
 
-`init_chat_model` supports any LangChain-compatible provider — swap `"anthropic:claude-sonnet-4-6"` for `"openai:gpt-4o"`, `"google_genai:gemini-2.0-flash"`, etc. and install the corresponding package.
+`init_chat_model` supports any LangChain-compatible provider — swap `"gpt-4o-mini"` for `"anthropic:claude-sonnet-4-6"`, `"google_genai:gemini-2.0-flash"`, etc. and install the corresponding package.
 
 ### Smoke testing
 
