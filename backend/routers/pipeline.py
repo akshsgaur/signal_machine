@@ -42,7 +42,7 @@ async def start_run(request: RunRequest, background_tasks: BackgroundTasks):
 async def stream_run(run_id: str):
     """SSE: polls disk for new agent output files and emits events."""
     async def event_generator():
-        base = Path("backend/storage/files") / run_id
+        base = Path(__file__).resolve().parents[1] / "storage" / "files" / run_id
         seen_agents: set[str] = set()
         brief_sent = False
 

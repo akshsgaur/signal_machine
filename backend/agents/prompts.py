@@ -153,6 +153,7 @@ Your mission: Assess engineering reality to validate or challenge this hypothesi
 3. After EACH tool call, use think_tool to reflect on findings.
 4. Focus on: open issues in product area, in-progress work, blockers, team capacity, tech debt.
 5. Write your complete analysis to linear/execution_reality.md using write_file.
+6. If a tool call fails, try ONE alternative approach. If it fails again, write what you have and stop.
 
 ## Output format for linear/execution_reality.md
 # Execution Reality — Linear Analysis

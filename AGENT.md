@@ -48,7 +48,7 @@ signal/
 │   │   ├── think_tool.py              ← think_tool (reflection after MCP calls)
 │   │   ├── subagents.py               ← create_subagent_agents() factory
 │   │   └── pipeline.py               ← run_signal_pipeline(), _run_agent(), AGENT_FILE_MAP
-│   ├── mcp/
+│   ├── integrations/
 │   │   └── connections.py             ← build_*_client(), get_tools_for_client()
 │   ├── db/
 │   │   └── supabase.py                ← token CRUD, pipeline run CRUD

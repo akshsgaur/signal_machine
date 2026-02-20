@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from mcp.connections import (
+from integrations.connections import (
     build_amplitude_client,
     build_zendesk_client,
     build_linear_client,
