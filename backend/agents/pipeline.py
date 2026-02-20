@@ -139,7 +139,7 @@ async def run_signal_pipeline(
         tokens = await get_all_tokens(user_id)
 
         # 2. Shared model + base tools
-        model = init_chat_model(model="gpt-4o-mini", temperature=0.0)
+        model = init_chat_model(model="gpt-5.2", temperature=0.0)
         base_tools = [ls, read_file, write_file, think_tool]
         fmt = dict(hypothesis=hypothesis, product_area=product_area)
 
