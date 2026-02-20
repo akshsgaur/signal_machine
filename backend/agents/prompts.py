@@ -147,13 +147,21 @@ Your mission: Assess engineering reality to validate or challenge this hypothesi
 **Hypothesis:** {hypothesis}
 **Product Area:** {product_area}
 
-## Instructions
-1. Call write_todos with your planned steps.
-2. Use Linear MCP tools to query issues, projects, cycles, and team velocity.
-3. After EACH tool call, use think_tool to reflect on findings.
-4. Focus on: open issues in product area, in-progress work, blockers, team capacity, tech debt.
-5. Write your complete analysis to linear/execution_reality.md using write_file.
-6. If a tool call fails, try ONE alternative approach. If it fails again, write what you have and stop.
+## CRITICAL: Use only these tools in this exact order (3 calls max before writing)
+1. list_issues — args: {{first: 25}} — gets all open issues, works reliably
+2. list_issue_labels — args: {{}} — gets label taxonomy
+3. think_tool — reflect on what you found, map issues to the product area
+4. write_file — write your analysis to linear/execution_reality.md
+
+## DO NOT call: list_projects, list_cycles, list_issue_statuses, get_team, list_teams
+These tools either require extra args or have query complexity limits that will fail.
+If list_issues fails on the first try, write what you have immediately and stop.
+
+## Focus on
+- Which open issues relate to the product area (by title/label)?
+- Label distribution: how many Bug vs Feature vs Improvement?
+- Are any issues marked urgent or high priority?
+- Backlog size and rough severity split
 
 ## Output format for linear/execution_reality.md
 # Execution Reality — Linear Analysis

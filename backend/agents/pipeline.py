@@ -93,6 +93,12 @@ async def _run_agent(
         # Pattern 1: no context manager — each tool call creates its own
         # short-lived session, avoiding the streamable_http SSE ClosedResourceError.
         mcp_tools = await client.get_tools()
+        # Enable tool-level error handling so BaseTool.arun() catches ToolException
+        # (e.g. "Query too complex") and returns it as a ToolMessage instead of
+        # re-raising. Without this, create_agent's ToolNode only handles
+        # ToolInvocationError and lets plain ToolException escape ainvoke entirely.
+        for tool in mcp_tools:
+            tool.handle_tool_error = True
         agent = create_agent(
             model,
             tools=base_tools + mcp_tools,
