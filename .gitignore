@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+venv/
+.venv/
+
+# Environment / secrets
+backend/.env
+frontend/.env.local
+
+# Agent disk storage (runtime data, not code)
+backend/storage/
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# Misc
+.DS_Store
+*.log
