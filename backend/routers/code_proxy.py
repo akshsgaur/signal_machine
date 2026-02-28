@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urljoin
 import httpx
 import websockets
 from fastapi import APIRouter, HTTPException, Request, WebSocket
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 router = APIRouter(prefix="/code", tags=["code-proxy"])
 
@@ -99,14 +99,15 @@ async def proxy_code(request: Request, user_id: str, path: str):
             },
             content=await request.body(),
         )
-
-        response = StreamingResponse(
-            resp.aiter_raw(),
+        body = await resp.aread()
+        response = Response(
+            content=body,
             status_code=resp.status_code,
             headers={
                 k: v
                 for k, v in resp.headers.items()
-                if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
+                if k.lower()
+                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
             },
         )
         if request.query_params.get("token"):
@@ -177,13 +178,15 @@ async def proxy_login(request: Request):
             },
             content=await request.body(),
         )
-        return StreamingResponse(
-            resp.aiter_raw(),
+        body = await resp.aread()
+        return Response(
+            content=body,
             status_code=resp.status_code,
             headers={
                 k: v
                 for k, v in resp.headers.items()
-                if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
+                if k.lower()
+                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
             },
         )
 
@@ -205,13 +208,15 @@ async def proxy_static(request: Request, path: str):
                 if k.lower() not in {"host", "origin", "referer", "content-length"}
             },
         )
-        return StreamingResponse(
-            resp.aiter_raw(),
+        body = await resp.aread()
+        return Response(
+            content=body,
             status_code=resp.status_code,
             headers={
                 k: v
                 for k, v in resp.headers.items()
-                if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
+                if k.lower()
+                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
             },
         )
 
@@ -233,12 +238,14 @@ async def proxy_vscode_assets(request: Request, path: str):
                 if k.lower() not in {"host", "origin", "referer", "content-length"}
             },
         )
-        return StreamingResponse(
-            resp.aiter_raw(),
+        body = await resp.aread()
+        return Response(
+            content=body,
             status_code=resp.status_code,
             headers={
                 k: v
                 for k, v in resp.headers.items()
-                if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
+                if k.lower()
+                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
             },
         )
