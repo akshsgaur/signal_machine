@@ -57,6 +57,30 @@ def _verify_token(token: str, expected_user_id: str) -> Dict:
     return payload
 
 
+def _filtered_request_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    blocked = {
+        "host",
+        "origin",
+        "referer",
+        "content-length",
+        "if-none-match",
+        "if-modified-since",
+    }
+    return {k: v for k, v in headers.items() if k.lower() not in blocked}
+
+
+def _filtered_response_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    blocked = {
+        "content-encoding",
+        "transfer-encoding",
+        "connection",
+        "content-length",
+        "etag",
+        "last-modified",
+    }
+    return {k: v for k, v in headers.items() if k.lower() not in blocked}
+
+
 def _get_cookie_token_user(request: Request) -> tuple[str, str]:
     token = request.query_params.get("token") or request.cookies.get("code_token") or ""
     user_id = request.query_params.get("user_id") or request.cookies.get("code_user") or ""
@@ -92,24 +116,16 @@ async def proxy_code(request: Request, user_id: str, path: str):
         resp = await client.request(
             request.method,
             upstream,
-            headers={
-                k: v
-                for k, v in request.headers.items()
-                if k.lower() not in {"host", "origin", "referer", "content-length"}
-            },
+            headers=_filtered_request_headers(dict(request.headers)),
             content=await request.body(),
         )
         body = await resp.aread()
         response = Response(
             content=body,
             status_code=resp.status_code,
-            headers={
-                k: v
-                for k, v in resp.headers.items()
-                if k.lower()
-                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
-            },
+            headers=_filtered_response_headers(dict(resp.headers)),
         )
+        response.headers["cache-control"] = "no-store"
         if request.query_params.get("token"):
             response.set_cookie("code_token", token, path="/", httponly=True, samesite="lax")
             response.set_cookie("code_user", user_id, path="/", httponly=True, samesite="lax")
@@ -171,23 +187,14 @@ async def proxy_login(request: Request):
         resp = await client.request(
             request.method,
             upstream,
-            headers={
-                k: v
-                for k, v in request.headers.items()
-                if k.lower() not in {"host", "origin", "referer", "content-length"}
-            },
+            headers=_filtered_request_headers(dict(request.headers)),
             content=await request.body(),
         )
         body = await resp.aread()
         return Response(
             content=body,
             status_code=resp.status_code,
-            headers={
-                k: v
-                for k, v in resp.headers.items()
-                if k.lower()
-                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
-            },
+            headers=_filtered_response_headers(dict(resp.headers)),
         )
 
 
@@ -202,22 +209,13 @@ async def proxy_static(request: Request, path: str):
     async with httpx.AsyncClient(timeout=None) as client:
         resp = await client.get(
             upstream,
-            headers={
-                k: v
-                for k, v in request.headers.items()
-                if k.lower() not in {"host", "origin", "referer", "content-length"}
-            },
+            headers=_filtered_request_headers(dict(request.headers)),
         )
         body = await resp.aread()
         return Response(
             content=body,
             status_code=resp.status_code,
-            headers={
-                k: v
-                for k, v in resp.headers.items()
-                if k.lower()
-                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
-            },
+            headers=_filtered_response_headers(dict(resp.headers)),
         )
 
 
@@ -232,20 +230,11 @@ async def proxy_vscode_assets(request: Request, path: str):
     async with httpx.AsyncClient(timeout=None) as client:
         resp = await client.get(
             upstream,
-            headers={
-                k: v
-                for k, v in request.headers.items()
-                if k.lower() not in {"host", "origin", "referer", "content-length"}
-            },
+            headers=_filtered_request_headers(dict(request.headers)),
         )
         body = await resp.aread()
         return Response(
             content=body,
             status_code=resp.status_code,
-            headers={
-                k: v
-                for k, v in resp.headers.items()
-                if k.lower()
-                not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
-            },
+            headers=_filtered_response_headers(dict(resp.headers)),
         )
