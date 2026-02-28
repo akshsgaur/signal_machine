@@ -10,6 +10,10 @@ interface Props {
   userId: string;
   connected: boolean;
   onConnected: () => void;
+  connectHref?: string;
+  secondaryConnectHref?: string;
+  secondaryLabel?: string;
+  note?: string;
 }
 
 export function IntegrationCard({
@@ -19,6 +23,10 @@ export function IntegrationCard({
   userId,
   connected,
   onConnected,
+  connectHref,
+  secondaryConnectHref,
+  secondaryLabel,
+  note,
 }: Props) {
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,26 +63,48 @@ export function IntegrationCard({
       </div>
 
       {!connected && (
-        <div className="flex gap-2">
-          <input
-            type="password"
-            placeholder={`Paste ${label} API token`}
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
-            onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-          />
-          <button
-            onClick={handleConnect}
-            disabled={loading || !token.trim()}
-            className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? "Connecting…" : "Connect"}
-          </button>
-        </div>
+        <>
+          {connectHref ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={connectHref}
+                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors"
+              >
+                Connect
+              </a>
+              {secondaryConnectHref && (
+                <a
+                  href={secondaryConnectHref}
+                  className="px-4 py-2 border border-zinc-700 text-zinc-200 text-sm font-medium rounded-lg hover:border-zinc-500 transition-colors"
+                >
+                  {secondaryLabel ?? "Enable private access"}
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                type="password"
+                placeholder={`Paste ${label} API token`}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+              />
+              <button
+                onClick={handleConnect}
+                disabled={loading || !token.trim()}
+                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? "Connecting..." : "Connect"}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {error && <p className="text-red-400 text-sm">{error}</p>}
+      {note && <p className="text-zinc-500 text-xs">{note}</p>}
     </div>
   );
 }

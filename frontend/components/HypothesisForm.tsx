@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { startRun } from "@/lib/api";
-
-const USER_ID = "demo-user-001"; // TODO: replace with auth
 
 export function HypothesisForm() {
   const router = useRouter();
+  const { user, isLoaded } = useUser();
   const [hypothesis, setHypothesis] = useState("");
   const [productArea, setProductArea] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,10 +16,14 @@ export function HypothesisForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!hypothesis.trim() || !productArea.trim()) return;
+    if (!user) {
+      setError("Please sign in to start an analysis.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const runId = await startRun(USER_ID, hypothesis.trim(), productArea.trim());
+      const runId = await startRun(user.id, hypothesis.trim(), productArea.trim());
       router.push(`/run/${runId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to start analysis");
@@ -41,7 +45,7 @@ export function HypothesisForm() {
           </label>
           <textarea
             rows={3}
-            placeholder="e.g. Users who complete onboarding in under 5 minutes have 2× 30-day retention"
+            placeholder="e.g. Users who complete onboarding in under 5 minutes have 2x 30-day retention"
             value={hypothesis}
             onChange={(e) => setHypothesis(e.target.value)}
             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 resize-none"
@@ -65,10 +69,15 @@ export function HypothesisForm() {
 
         <button
           type="submit"
-          disabled={loading || !hypothesis.trim() || !productArea.trim()}
+          disabled={
+            !isLoaded ||
+            loading ||
+            !hypothesis.trim() ||
+            !productArea.trim()
+          }
           className="w-full py-3 bg-white text-black font-semibold rounded-xl hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {loading ? "Starting analysis…" : "Analyze →"}
+          {loading ? "Starting analysis..." : "Analyze ->"}
         </button>
       </form>
     </div>

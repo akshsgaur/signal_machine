@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from agents.pipeline import AGENT_FILE_MAP, run_signal_pipeline
-from db.supabase import create_pipeline_run, get_pipeline_run
+from db.supabase import create_pipeline_run, get_pipeline_run, get_latest_pipeline_run
 
 router = APIRouter(prefix="/run", tags=["pipeline"])
 
@@ -85,3 +85,25 @@ async def stream_run(run_id: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/latest/{user_id}")
+async def latest_run(user_id: str):
+    """Return the latest completed run with per-agent outputs."""
+    run = await get_latest_pipeline_run(user_id)
+    if not run:
+        return {"run_id": None, "status": "none", "brief": None, "sources": {}}
+
+    base = Path(__file__).resolve().parents[1] / "storage" / "files" / run["id"]
+    sources: dict[str, str] = {}
+    for agent_key, file_path in AGENT_FILE_MAP.items():
+        disk_path = base / file_path
+        if disk_path.exists():
+            sources[agent_key] = disk_path.read_text(encoding="utf-8")
+
+    return {
+        "run_id": run["id"],
+        "status": run["status"],
+        "brief": run.get("brief"),
+        "sources": sources,
+    }

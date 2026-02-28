@@ -2,49 +2,58 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 import { IntegrationCard } from "@/components/IntegrationCard";
-import { getIntegrations } from "@/lib/api";
-
-const USER_ID = "demo-user-001";
+import { getIntegrations, getSlackConnectUrl } from "@/lib/api";
 
 const INTEGRATIONS = [
   {
     name: "amplitude",
     label: "Amplitude",
-    description: "Behavioral analytics — user events, funnels, retention",
+    description: "Behavioral analytics - user events, funnels, retention",
   },
   {
     name: "zendesk",
     label: "Zendesk",
-    description: "Support tickets — themes, pain points, sentiment",
+    description: "Support tickets - themes, pain points, sentiment",
   },
   {
     name: "productboard",
     label: "Productboard",
-    description: "Feature requests — demand signals, user segments",
+    description: "Feature requests - demand signals, user segments",
   },
   {
     name: "linear",
     label: "Linear",
-    description: "Engineering backlog — capacity, blockers, velocity",
+    description: "Engineering backlog - capacity, blockers, velocity",
   },
 ];
 
 export default function ConnectPage() {
+  const { user, isLoaded } = useUser();
   const [connected, setConnected] = useState<Record<string, boolean>>({});
 
   async function refreshConnections() {
     try {
-      const data = await getIntegrations(USER_ID);
+      if (!user) return;
+      const data = await getIntegrations(user.id);
       setConnected(data);
     } catch {
-      // ignore — user may not have any tokens yet
+      // ignore - user may not have any tokens yet
     }
   }
 
   useEffect(() => {
-    refreshConnections();
-  }, []);
+    if (isLoaded) refreshConnections();
+  }, [isLoaded, user?.id]);
+
+  if (!isLoaded) {
+    return (
+      <main className="flex flex-col items-center min-h-screen px-4 py-16">
+        <div className="w-full max-w-xl text-zinc-400 text-sm">Loading...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex flex-col items-center min-h-screen px-4 py-16">
@@ -60,16 +69,32 @@ export default function ConnectPage() {
             href="/"
             className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
           >
-            ← Back
+            &lt;- Back
           </Link>
         </div>
 
         <div className="space-y-4">
+          <IntegrationCard
+            name="slack"
+            label="Slack"
+            description="Team conversations - channels, DMs, and threads"
+            userId={user?.id ?? ""}
+            connected={!!connected["slack"]}
+            onConnected={refreshConnections}
+            connectHref={
+              user?.id ? getSlackConnectUrl(user.id, "public") : undefined
+            }
+            secondaryConnectHref={
+              user?.id ? getSlackConnectUrl(user.id, "private") : undefined
+            }
+            secondaryLabel="Enable private + DMs"
+            note="Connects public channels first. Enable private access if you want DMs and private channels."
+          />
           {INTEGRATIONS.map((integration) => (
             <IntegrationCard
               key={integration.name}
               {...integration}
-              userId={USER_ID}
+              userId={user?.id ?? ""}
               connected={!!connected[integration.name]}
               onConnected={refreshConnections}
             />
