@@ -57,6 +57,12 @@ def _verify_token(token: str, expected_user_id: str) -> Dict:
     return payload
 
 
+def _get_cookie_token_user(request: Request) -> tuple[str, str]:
+    token = request.query_params.get("token") or request.cookies.get("code_token") or ""
+    user_id = request.query_params.get("user_id") or request.cookies.get("code_user") or ""
+    return token, user_id
+
+
 @router.get("/session")
 async def get_code_session(user_id: str):
     _require_proxy_env()
@@ -104,7 +110,10 @@ async def proxy_code(request: Request, user_id: str, path: str):
             },
         )
         if request.query_params.get("token"):
-            response.headers["set-cookie"] = f"code_token={token}; Path=/; HttpOnly; SameSite=Lax"
+            response.headers["set-cookie"] = (
+                f"code_token={token}; Path=/; HttpOnly; SameSite=Lax\n"
+                f"code_user={user_id}; Path=/; HttpOnly; SameSite=Lax"
+            )
         return response
 
 
@@ -149,3 +158,89 @@ async def proxy_code_ws(websocket: WebSocket, user_id: str, path: str):
                 await websocket.close()
 
         await asyncio.gather(to_upstream(), to_client())
+
+
+@router.api_route("/login", methods=["GET", "POST"])
+async def proxy_login(request: Request):
+    _require_proxy_env()
+    token, user_id = _get_cookie_token_user(request)
+    if not token or not user_id:
+        raise HTTPException(status_code=401, detail="Missing code session token.")
+    _verify_token(token, user_id)
+    upstream = f"{CODE_SERVER_URL}/login"
+    async with httpx.AsyncClient(timeout=None) as client:
+        resp = await client.request(
+            request.method,
+            upstream,
+            headers={
+                k: v
+                for k, v in request.headers.items()
+                if k.lower() not in {"host", "origin", "referer", "content-length"}
+            },
+            content=await request.body(),
+        )
+        return StreamingResponse(
+            resp.aiter_raw(),
+            status_code=resp.status_code,
+            headers={
+                k: v
+                for k, v in resp.headers.items()
+                if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
+            },
+        )
+
+
+@router.api_route("/static/{path:path}", methods=["GET"])
+async def proxy_static(request: Request, path: str):
+    _require_proxy_env()
+    token, user_id = _get_cookie_token_user(request)
+    if not token or not user_id:
+        raise HTTPException(status_code=401, detail="Missing code session token.")
+    _verify_token(token, user_id)
+    upstream = f"{CODE_SERVER_URL}/static/{path}"
+    async with httpx.AsyncClient(timeout=None) as client:
+        resp = await client.get(
+            upstream,
+            headers={
+                k: v
+                for k, v in request.headers.items()
+                if k.lower() not in {"host", "origin", "referer", "content-length"}
+            },
+        )
+        return StreamingResponse(
+            resp.aiter_raw(),
+            status_code=resp.status_code,
+            headers={
+                k: v
+                for k, v in resp.headers.items()
+                if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
+            },
+        )
+
+
+@router.api_route("/vscode/{path:path}", methods=["GET"])
+async def proxy_vscode_assets(request: Request, path: str):
+    _require_proxy_env()
+    token, user_id = _get_cookie_token_user(request)
+    if not token or not user_id:
+        raise HTTPException(status_code=401, detail="Missing code session token.")
+    _verify_token(token, user_id)
+    upstream = f"{CODE_SERVER_URL}/vscode/{path}"
+    async with httpx.AsyncClient(timeout=None) as client:
+        resp = await client.get(
+            upstream,
+            headers={
+                k: v
+                for k, v in request.headers.items()
+                if k.lower() not in {"host", "origin", "referer", "content-length"}
+            },
+        )
+        return StreamingResponse(
+            resp.aiter_raw(),
+            status_code=resp.status_code,
+            headers={
+                k: v
+                for k, v in resp.headers.items()
+                if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
+            },
+        )
