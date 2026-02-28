@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import {
   createInsightsFolder,
   getIntegrations,
@@ -58,6 +59,7 @@ type ChatSession = {
 
 export default function WorkspacePage() {
   const { user, isLoaded } = useUser();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("analysis");
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [loadingIntegrations, setLoadingIntegrations] = useState(true);
@@ -105,6 +107,12 @@ export default function WorkspacePage() {
     },
   ]);
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (isLoaded && !user) {
+      router.replace("/sign-in");
+    }
+  }, [isLoaded, router, user]);
 
   useEffect(() => {
     let mounted = true;
