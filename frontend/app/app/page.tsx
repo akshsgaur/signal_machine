@@ -652,7 +652,6 @@ export default function WorkspacePage() {
                         </label>
                         <label className="block px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800/60 cursor-pointer">
                           Folder upload
-                          {/* @ts-expect-error - nonstandard attribute supported by Chromium/WebKit */}
                           <input
                             type="file"
                             multiple
