@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { IntegrationCard } from "@/components/IntegrationCard";
@@ -33,7 +33,7 @@ export default function ConnectPage() {
   const { user, isLoaded } = useUser();
   const [connected, setConnected] = useState<Record<string, boolean>>({});
 
-  async function refreshConnections() {
+  const refreshConnections = useCallback(async () => {
     try {
       if (!user) return;
       const data = await getIntegrations(user.id);
@@ -41,11 +41,11 @@ export default function ConnectPage() {
     } catch {
       // ignore - user may not have any tokens yet
     }
-  }
+  }, [user]);
 
   useEffect(() => {
     if (isLoaded) refreshConnections();
-  }, [isLoaded, user?.id]);
+  }, [isLoaded, refreshConnections]);
 
   if (!isLoaded) {
     return (

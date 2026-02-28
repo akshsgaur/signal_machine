@@ -83,7 +83,6 @@ function AgentRow({
 }
 
 export function PipelineTracker({ agentStatuses, pipelineStatus }: Props) {
-  const [startTime] = useState(Date.now());
   const [elapsed, setElapsed] = useState<Record<string, number>>({});
   const [agentStart] = useState<Record<string, number>>({
     behavioral: Date.now(),

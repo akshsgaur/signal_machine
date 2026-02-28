@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useUser } from "@clerk/nextjs";
@@ -121,7 +122,7 @@ export default function WorkspacePage() {
     return () => {
       mounted = false;
     };
-  }, [isLoaded, user?.id]);
+  }, [isLoaded, user]);
 
   useEffect(() => {
     let mounted = true;
@@ -138,7 +139,7 @@ export default function WorkspacePage() {
     return () => {
       mounted = false;
     };
-  }, [isLoaded, user?.id]);
+  }, [isLoaded, user]);
 
   useEffect(() => {
     let mounted = true;
@@ -155,9 +156,9 @@ export default function WorkspacePage() {
     return () => {
       mounted = false;
     };
-  }, [user?.id]);
+  }, [user]);
 
-  async function refreshAnalysis() {
+  const refreshAnalysis = useCallback(async () => {
     if (!user) return;
     setAnalysisLoading(true);
     setAnalysisError("");
@@ -170,14 +171,14 @@ export default function WorkspacePage() {
     } finally {
       setAnalysisLoading(false);
     }
-  }
+  }, [user]);
 
   useEffect(() => {
     refreshAnalysis();
-  }, [user?.id]);
+  }, [refreshAnalysis]);
 
 
-  async function refreshInsights() {
+  const refreshInsights = useCallback(async () => {
     if (!user) return;
     setInsightsRefreshing(true);
     try {
@@ -188,11 +189,11 @@ export default function WorkspacePage() {
     } finally {
       setInsightsRefreshing(false);
     }
-  }
+  }, [user, activeFolder]);
 
   useEffect(() => {
     refreshInsights();
-  }, [user?.id, activeFolder]);
+  }, [refreshInsights]);
 
   useEffect(() => {
     async function loadFolders() {
@@ -205,7 +206,7 @@ export default function WorkspacePage() {
       }
     }
     loadFolders();
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     if (!insightsDocs.some((doc) => (doc.status ?? "").toLowerCase() === "processing")) {
@@ -215,7 +216,7 @@ export default function WorkspacePage() {
       refreshInsights();
     }, 5000);
     return () => clearInterval(timer);
-  }, [insightsDocs]);
+  }, [insightsDocs, refreshInsights]);
 
   const connectedIntegrations = useMemo(
     () => Object.keys(connected).filter((key) => connected[key]),
@@ -651,7 +652,7 @@ export default function WorkspacePage() {
                         </label>
                         <label className="block px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800/60 cursor-pointer">
                           Folder upload
-                          {/* @ts-ignore - nonstandard attribute supported by Chromium/WebKit */}
+                          {/* @ts-expect-error - nonstandard attribute supported by Chromium/WebKit */}
                           <input
                             type="file"
                             multiple
@@ -698,7 +699,7 @@ export default function WorkspacePage() {
                           : "hover:border-zinc-700"
                       }`}
                     >
-                      <img src="/Folder-1.png" alt="Folder" className="h-10 w-10" />
+                      <Image src="/Folder-1.png" alt="Folder" width={40} height={40} />
                       <span className="text-zinc-200">All files</span>
                     </button>
                     {insightsFolders.map((folder) => (
@@ -711,7 +712,7 @@ export default function WorkspacePage() {
                             : "hover:border-zinc-700"
                         }`}
                       >
-                        <img src="/Folder-1.png" alt="Folder" className="h-10 w-10" />
+                        <Image src="/Folder-1.png" alt="Folder" width={40} height={40} />
                         <span className="text-zinc-200">{folder.name}</span>
                       </button>
                     ))}
@@ -721,7 +722,7 @@ export default function WorkspacePage() {
                     htmlFor="insights-drop"
                     className="block w-full rounded-xl border border-dashed border-zinc-700 bg-zinc-950/50 p-6 text-center text-sm text-zinc-400 cursor-pointer hover:border-zinc-500 transition-colors"
                   >
-                    Drop PDFs here or click "Upload files" to add customer interviews.
+                    Drop PDFs here or click &quot;Upload files&quot; to add customer interviews.
                     <div className="mt-2 text-xs text-zinc-500">
                       Supports PDF, Word, PPT, Excel, images, and text files.
                     </div>
@@ -763,10 +764,12 @@ export default function WorkspacePage() {
                               className="grid grid-cols-[1fr_140px_160px] gap-4 px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-900/40"
                             >
                               <div className="flex items-center gap-3">
-                                <img
+                                <Image
                                   src="/Folder-1.png"
                                   alt="File"
-                                  className="h-6 w-6 opacity-70"
+                                  width={24}
+                                  height={24}
+                                  className="opacity-70"
                                 />
                                 <div className="truncate">
                                   {doc.filename ??
