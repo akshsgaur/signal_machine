@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useUser } from "@clerk/nextjs";
@@ -104,6 +104,7 @@ export default function WorkspacePage() {
       content: "Ask me anything about your product. I can summarize trends and signals.",
     },
   ]);
+  const folderUploadRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -217,6 +218,13 @@ export default function WorkspacePage() {
     }, 5000);
     return () => clearInterval(timer);
   }, [insightsDocs, refreshInsights]);
+
+  useEffect(() => {
+    if (folderUploadRef.current) {
+      folderUploadRef.current.setAttribute("webkitdirectory", "true");
+      folderUploadRef.current.setAttribute("directory", "true");
+    }
+  }, []);
 
   const connectedIntegrations = useMemo(
     () => Object.keys(connected).filter((key) => connected[key]),
@@ -653,9 +661,9 @@ export default function WorkspacePage() {
                         <label className="block px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800/60 cursor-pointer">
                           Folder upload
                           <input
+                            ref={folderUploadRef}
                             type="file"
                             multiple
-                            webkitdirectory="true"
                             className="hidden"
                             onChange={(e) => {
                               setInsightsMenuOpen(false);
