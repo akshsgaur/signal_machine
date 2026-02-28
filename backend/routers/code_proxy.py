@@ -110,10 +110,8 @@ async def proxy_code(request: Request, user_id: str, path: str):
             },
         )
         if request.query_params.get("token"):
-            response.headers["set-cookie"] = (
-                f"code_token={token}; Path=/; HttpOnly; SameSite=Lax\n"
-                f"code_user={user_id}; Path=/; HttpOnly; SameSite=Lax"
-            )
+            response.set_cookie("code_token", token, path="/", httponly=True, samesite="lax")
+            response.set_cookie("code_user", user_id, path="/", httponly=True, samesite="lax")
         return response
 
 
