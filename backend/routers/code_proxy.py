@@ -92,9 +92,26 @@ async def get_code_session(user_id: str):
     _require_proxy_env()
     exp = int(time.time()) + CODE_TOKEN_TTL_SECONDS
     token = _sign_payload({"user_id": user_id, "exp": exp})
-    path = f"/code/u/{user_id}/?token={token}"
+    path = f"/code/u/{user_id}/"
     url = f"{CODE_PROXY_PUBLIC_BASE}{path}" if CODE_PROXY_PUBLIC_BASE else path
-    return JSONResponse({"url": url, "expires_at": exp})
+    response = JSONResponse({"url": url, "expires_at": exp, "token": token})
+    response.set_cookie(
+        "code_token",
+        token,
+        path="/",
+        httponly=True,
+        samesite="none",
+        secure=True,
+    )
+    response.set_cookie(
+        "code_user",
+        user_id,
+        path="/",
+        httponly=True,
+        samesite="none",
+        secure=True,
+    )
+    return response
 
 
 @router.api_route(

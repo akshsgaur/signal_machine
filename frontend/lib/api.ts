@@ -40,9 +40,12 @@ export async function getCodeSessionUrl(
 ): Promise<{ url: string; expires_at: number }> {
   const url = new URL(`${API_URL}/code/session`);
   url.searchParams.set("user_id", userId);
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { credentials: "include" });
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
+  if (data?.token && typeof data.token === "string" && !data.url?.includes("token=")) {
+    data.url = `${data.url}${data.url.includes("?") ? "&" : "?"}token=${data.token}`;
+  }
   if (data?.url && typeof data.url === "string" && data.url.startsWith("/")) {
     data.url = `${API_URL}${data.url}`;
   }
