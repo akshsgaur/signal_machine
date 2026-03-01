@@ -19,21 +19,25 @@ const INTEGRATIONS = [
     name: "amplitude",
     label: "Amplitude",
     description: "Behavioral analytics - user events, funnels, retention",
+    logo: "/amplitude.png",
   },
   {
     name: "zendesk",
     label: "Zendesk",
     description: "Support tickets - themes, pain points, sentiment",
+    logo: "/zendesk.png",
   },
   {
     name: "productboard",
     label: "Productboard",
     description: "Feature requests - demand signals, user segments",
+    logo: "/productboard.png",
   },
   {
     name: "linear",
     label: "Linear",
     description: "Engineering backlog - capacity, blockers, velocity",
+    logo: "/linear.png",
   },
 ];
 
@@ -155,6 +159,7 @@ export default function ConnectPage() {
             name="slack"
             label="Slack"
             description="Team conversations - channels, DMs, and threads"
+            logo="/slack.png"
             userId={user?.id ?? ""}
             connected={!!connected["slack"]}
             onConnected={refreshConnections}

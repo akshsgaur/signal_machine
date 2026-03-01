@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { connectIntegration } from "@/lib/api";
 
@@ -10,6 +11,7 @@ interface Props {
   userId: string;
   connected: boolean;
   onConnected: () => void;
+  logo?: string;
   connectHref?: string;
   secondaryConnectHref?: string;
   secondaryLabel?: string;
@@ -23,6 +25,7 @@ export function IntegrationCard({
   userId,
   connected,
   onConnected,
+  logo,
   connectHref,
   secondaryConnectHref,
   secondaryLabel,
@@ -50,9 +53,20 @@ export function IntegrationCard({
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-white font-semibold text-lg">{label}</h3>
-          <p className="text-zinc-400 text-sm mt-0.5">{description}</p>
+        <div className="flex items-center gap-3">
+          {logo && (
+            <Image
+              src={logo}
+              alt={`${label} logo`}
+              width={32}
+              height={32}
+              className="rounded-md"
+            />
+          )}
+          <div>
+            <h3 className="text-white font-semibold text-lg">{label}</h3>
+            <p className="text-zinc-400 text-sm mt-0.5">{description}</p>
+          </div>
         </div>
         {connected && (
           <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-medium">
