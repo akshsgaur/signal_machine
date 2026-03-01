@@ -17,7 +17,7 @@ const isProtectedRoute = createRouteMatcher([
 
 export default clerkMiddleware((auth, req) => {
   const { pathname, searchParams } = req.nextUrl;
-  if ((pathname === "/sign-in" || pathname === "/sign-up") && searchParams.get("force") !== "1") {
+  if ((pathname === "/sign-in" || pathname === "/sign-up") && searchParams.get("allow") !== "1") {
     return NextResponse.redirect(new URL("/", req.url));
   }
   if (isProtectedRoute(req)) auth.protect();
