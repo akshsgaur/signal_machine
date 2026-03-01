@@ -111,7 +111,7 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (isLoaded && !user) {
-      router.replace("/sign-in?allow=1");
+      router.replace("/auth/sign-in?allow=1");
     }
   }, [isLoaded, router, user]);
 

@@ -5,6 +5,7 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/auth(.*)",
   "/favicon.ico",
   "/_next(.*)",
 ]);
@@ -20,7 +21,10 @@ export default clerkMiddleware((auth, req) => {
   if (pathname === "/") {
     return NextResponse.next();
   }
-  if ((pathname === "/sign-in" || pathname === "/sign-up") && searchParams.get("allow") !== "1") {
+  if (pathname === "/sign-in" || pathname === "/sign-up") {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+  if ((pathname === "/auth/sign-in" || pathname === "/auth/sign-up") && searchParams.get("allow") !== "1") {
     return NextResponse.redirect(new URL("/", req.url));
   }
   if (isProtectedRoute(req)) auth.protect();

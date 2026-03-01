@@ -44,7 +44,7 @@ export default function Home() {
               </SignedIn>
               <SignedOut>
                 <Link
-                  href="/sign-in?allow=1"
+                  href="/auth/sign-in?allow=1"
                   className="rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-200 hover:border-zinc-500 transition-colors"
                 >
                   Sign in
@@ -74,7 +74,7 @@ export default function Home() {
               </SignedIn>
               <SignedOut>
                 <Link
-                  href="/sign-up?allow=1"
+                  href="/auth/sign-up?allow=1"
                   className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black hover:bg-emerald-400 transition-colors"
                 >
                   Start free
@@ -152,7 +152,7 @@ export default function Home() {
                 </p>
                 <div className="mt-4">
                   <Link
-                    href="/sign-in?allow=1"
+                    href="/auth/sign-in?allow=1"
                     className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2 text-xs font-semibold text-black hover:bg-emerald-400 transition-colors"
                   >
                     Sign in to continue
