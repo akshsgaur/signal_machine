@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { SignIn, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 
 export default function Home() {
   return (
@@ -143,35 +143,20 @@ export default function Home() {
 
           <section className="mt-16 pb-16">
             <SignedOut>
-              <div className="mx-auto max-w-3xl rounded-3xl border border-zinc-900 bg-zinc-950/70 p-8">
+              <div className="mx-auto max-w-3xl rounded-3xl border border-zinc-900 bg-zinc-950/70 p-6 text-center">
                 <div className="text-sm font-semibold text-white">
-                  Sign in to launch your workspace
+                  Ready to launch your workspace?
                 </div>
-                <div className="mt-6">
-                  <SignIn
-                    routing="hash"
-                    appearance={{
-                      elements: {
-                        rootBox: "w-full",
-                        cardBox: "w-full max-w-none",
-                        card: "bg-transparent shadow-none p-0",
-                        headerTitle: "hidden",
-                        headerSubtitle: "hidden",
-                        footer: "hidden",
-                        formFieldLabel:
-                          "text-zinc-400 text-xs uppercase tracking-wider",
-                        formFieldInput:
-                          "bg-zinc-900 border border-zinc-800 text-white focus:ring-emerald-500/40 focus:border-emerald-400 w-full",
-                        formButtonPrimary:
-                          "bg-emerald-500 text-black hover:bg-emerald-400 w-full",
-                        dividerLine: "bg-zinc-800",
-                        dividerText: "text-zinc-500",
-                        socialButtonsBlockButton:
-                          "bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 w-full justify-start gap-3",
-                        socialButtonsBlockButtonText: "text-sm",
-                      },
-                    }}
-                  />
+                <p className="mt-2 text-xs text-zinc-400">
+                  Sign in to connect your product signals and start analyzing.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    href="/sign-in"
+                    className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2 text-xs font-semibold text-black hover:bg-emerald-400 transition-colors"
+                  >
+                    Sign in to continue
+                  </Link>
                 </div>
               </div>
             </SignedOut>
