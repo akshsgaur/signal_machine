@@ -5,12 +5,17 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/favicon.ico",
+  "/_next(.*)",
+]);
+
+const isProtectedRoute = createRouteMatcher([
+  "/app(.*)",
+  "/connect(.*)",
+  "/run(.*)",
 ]);
 
 export default clerkMiddleware((auth, req) => {
-  if (!isPublicRoute(req)) {
-    auth.protect();
-  }
+  if (isProtectedRoute(req)) auth.protect();
 });
 
 export const config = {
