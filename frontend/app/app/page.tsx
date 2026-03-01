@@ -110,12 +110,6 @@ export default function WorkspacePage() {
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (isLoaded && !user) {
-      router.replace("/sign-in?force=1");
-    }
-  }, [isLoaded, router, user]);
-
-  useEffect(() => {
     let mounted = true;
     async function loadIntegrations() {
       try {
