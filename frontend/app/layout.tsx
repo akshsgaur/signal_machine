@@ -25,7 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      signInUrl="/auth/sign-in"
+      signUpUrl="/auth/sign-up"
+      afterSignOutUrl="/"
+    >
       <html lang="en">
         <body
           className={`${geistSans.variable} ${geistMono.variable} bg-[#0A0A0A] min-h-screen text-white antialiased`}
