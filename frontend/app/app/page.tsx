@@ -472,12 +472,6 @@ export default function WorkspacePage() {
                     >
                       Refresh
                     </button>
-                    <Link
-                      href="/connect"
-                      className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-                    >
-                      Manage integrations -&gt;
-                    </Link>
                   </div>
                 </div>
 
@@ -902,7 +896,15 @@ export default function WorkspacePage() {
 
             {activeTab === "profile" && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <h2 className="text-xl font-semibold mb-4">Profile</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Profile</h2>
+                  <Link
+                    href="/connect"
+                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    Manage integrations -&gt;
+                  </Link>
+                </div>
                 <div className="space-y-3 text-sm text-zinc-300">
                   <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                     <span className="text-zinc-400">User</span>
