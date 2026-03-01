@@ -12,8 +12,8 @@ from typing import Callable
 import httpx
 
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from langgraph.errors import GraphRecursionError
 from mcp import McpError
 
@@ -226,8 +226,10 @@ async def run_signal_pipeline(
         # 1. Fetch all tokens from Supabase
         tokens = await get_all_tokens(user_id)
 
-        # 2. Shared model + base tools
-        model = init_chat_model(model="gpt-5.2", temperature=0.0)
+        # 2. Shared model + base tools — use user-configured key/model if set
+        openai_api_key = tokens.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
+        openai_model = tokens.get("openai_model") or "gpt-4o-mini"
+        model = ChatOpenAI(model=openai_model, api_key=openai_api_key, temperature=0.0)
         base_tools = [ls, read_file, write_file, think_tool]
         fmt = dict(hypothesis=hypothesis, product_area=product_area)
 

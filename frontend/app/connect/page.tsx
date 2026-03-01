@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { IntegrationCard } from "@/components/IntegrationCard";
-import { getIntegrations, getSlackConnectUrl } from "@/lib/api";
+import { connectIntegration, getIntegrations, getSlackConnectUrl } from "@/lib/api";
+
+const OPENAI_MODELS = [
+  { value: "gpt-4o", label: "GPT-4o" },
+  { value: "gpt-4o-mini", label: "GPT-4o mini" },
+  { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+  { value: "o1-mini", label: "o1 mini" },
+];
 
 const INTEGRATIONS = [
   {
@@ -32,6 +39,10 @@ const INTEGRATIONS = [
 export default function ConnectPage() {
   const { user, isLoaded } = useUser();
   const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [aiModel, setAiModel] = useState("gpt-4o-mini");
+  const [aiKey, setAiKey] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
 
   const refreshConnections = useCallback(async () => {
     try {
@@ -46,6 +57,22 @@ export default function ConnectPage() {
   useEffect(() => {
     if (isLoaded) refreshConnections();
   }, [isLoaded, refreshConnections]);
+
+  async function handleSaveAi() {
+    if (!aiKey.trim() || !user) return;
+    setAiLoading(true);
+    setAiError("");
+    try {
+      await connectIntegration(user.id, "openai_api_key", aiKey.trim());
+      await connectIntegration(user.id, "openai_model", aiModel);
+      setAiKey("");
+      refreshConnections();
+    } catch (err: unknown) {
+      setAiError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   if (!isLoaded) {
     return (
@@ -74,6 +101,55 @@ export default function ConnectPage() {
         </div>
 
         <div className="space-y-4">
+          {/* AI Model card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-semibold text-lg">AI Model</h3>
+                <p className="text-zinc-400 text-sm mt-0.5">
+                  OpenAI model that powers the deep analysis pipeline
+                </p>
+              </div>
+              {connected["openai_api_key"] && (
+                <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  Configured
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <select
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zinc-500"
+              >
+                {OPENAI_MODELS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="password"
+                placeholder="Paste OpenAI API key"
+                value={aiKey}
+                onChange={(e) => setAiKey(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveAi()}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+              />
+              <button
+                onClick={handleSaveAi}
+                disabled={aiLoading || !aiKey.trim()}
+                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {aiLoading ? "Saving..." : "Save"}
+              </button>
+            </div>
+
+            {aiError && <p className="text-red-400 text-sm">{aiError}</p>}
+          </div>
+
           <IntegrationCard
             name="slack"
             label="Slack"
