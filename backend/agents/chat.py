@@ -13,9 +13,11 @@ from langchain_core.messages import AIMessage, ToolMessage
 from db.supabase import get_all_tokens, get_slack_tokens, query_slack_messages
 from integrations.connections import (
     build_amplitude_client,
+    build_atlassian_client,
     build_linear_client,
     build_productboard_client,
     build_zendesk_client,
+    get_tools_for_client,
 )
 
 CHAT_SYSTEM_PROMPT = """You are Signal, a product intelligence assistant.
@@ -34,6 +36,9 @@ and do not invent insights.
 If the user mentions a folder name (e.g., "Feb 27th", "marketing_docs"), you
 must first call the Morphik folder lookup tool to resolve it, then query only
 within that folder. If the folder doesn't exist, say so and stop.
+
+Can query Jira for issues, bugs, sprint status, and project tracking (if connected).
+Can query Confluence for documentation, decision records, and specs (if connected).
 
 If the user asks about Slack, use the Slack messages tool. If they ask for
 unread messages, clarify that unread status is approximated as "recent" unless
@@ -407,6 +412,17 @@ async def build_chat_tools(
             tool.handle_tool_error = True
             tools.append(tool)
             tool_to_source[tool_name] = source
+
+    if "atlassian" in tokens:
+        atlassian_client = build_atlassian_client(tokens["atlassian"])
+        atlassian_tools = await get_tools_for_client(atlassian_client)
+        for t in atlassian_tools:
+            t.handle_tool_error = True
+            tool_name = getattr(t, "name", None)
+            if tool_name:
+                tool_to_source[tool_name] = "Jira/Confluence"
+        tools.extend(atlassian_tools)
+        connected_sources.append("Jira/Confluence")
 
     if MORPHIK_API_KEY:
         folder_tool = build_morphik_folder_tool(user_id)

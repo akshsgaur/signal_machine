@@ -48,6 +48,11 @@ export default function ConnectPage() {
   const [aiKey, setAiKey] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [atlassianUrl, setAtlassianUrl] = useState("");
+  const [atlassianEmail, setAtlassianEmail] = useState("");
+  const [atlassianToken, setAtlassianToken] = useState("");
+  const [atlassianLoading, setAtlassianLoading] = useState(false);
+  const [atlassianError, setAtlassianError] = useState("");
 
   const refreshConnections = useCallback(async () => {
     try {
@@ -76,6 +81,26 @@ export default function ConnectPage() {
       setAiError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setAiLoading(false);
+    }
+  }
+
+  async function handleSaveAtlassian() {
+    if (!atlassianUrl.trim() || !atlassianEmail.trim() || !atlassianToken.trim() || !user) return;
+    setAtlassianLoading(true);
+    setAtlassianError("");
+    try {
+      const payload = JSON.stringify({
+        url: atlassianUrl.trim(),
+        username: atlassianEmail.trim(),
+        api_token: atlassianToken.trim(),
+      });
+      await connectIntegration(user.id, "atlassian", payload);
+      setAtlassianToken("");
+      refreshConnections();
+    } catch (err: unknown) {
+      setAtlassianError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setAtlassianLoading(false);
     }
   }
 
@@ -153,6 +178,66 @@ export default function ConnectPage() {
             </div>
 
             {aiError && <p className="text-red-400 text-sm">{aiError}</p>}
+          </div>
+
+          {/* Atlassian card (Jira + Confluence) */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/Atlassian.jpg"
+                  alt="Atlassian logo"
+                  className="w-8 h-8 rounded-md object-contain"
+                />
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Atlassian</h3>
+                  <p className="text-zinc-400 text-sm mt-0.5">
+                    Jira issues &amp; Confluence docs — project tracking and knowledge base
+                  </p>
+                </div>
+              </div>
+              {connected["atlassian"] && (
+                <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  Connected
+                </span>
+              )}
+            </div>
+
+            <input
+              type="text"
+              placeholder="Atlassian URL (https://your-company.atlassian.net)"
+              value={atlassianUrl}
+              onChange={(e) => setAtlassianUrl(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Email"
+                value={atlassianEmail}
+                onChange={(e) => setAtlassianEmail(e.target.value)}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+              />
+              <input
+                type="password"
+                placeholder="API Token"
+                value={atlassianToken}
+                onChange={(e) => setAtlassianToken(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveAtlassian()}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+              />
+              <button
+                onClick={handleSaveAtlassian}
+                disabled={atlassianLoading || !atlassianUrl.trim() || !atlassianEmail.trim() || !atlassianToken.trim()}
+                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {atlassianLoading ? "Saving..." : "Save"}
+              </button>
+            </div>
+
+            {atlassianError && <p className="text-red-400 text-sm">{atlassianError}</p>}
           </div>
 
           <IntegrationCard

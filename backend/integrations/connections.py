@@ -66,6 +66,32 @@ def build_productboard_client(token: str) -> MultiServerMCPClient:
     )
 
 
+def build_atlassian_client(token_json: str) -> MultiServerMCPClient:
+    """Build an Atlassian MCP client (Jira + Confluence) using uvx mcp-atlassian stdio transport."""
+    import json
+    creds = json.loads(token_json)
+    url = creds["url"].rstrip("/")
+    username = creds["username"]
+    api_token = creds["api_token"]
+    return MultiServerMCPClient(
+        {
+            "atlassian": {
+                "transport": "stdio",
+                "command": "uvx",
+                "args": ["mcp-atlassian"],
+                "env": {
+                    "JIRA_URL": url,
+                    "JIRA_USERNAME": username,
+                    "JIRA_API_TOKEN": api_token,
+                    "CONFLUENCE_URL": f"{url}/wiki",
+                    "CONFLUENCE_USERNAME": username,
+                    "CONFLUENCE_API_TOKEN": api_token,
+                },
+            }
+        }
+    )
+
+
 async def get_tools_for_client(client: MultiServerMCPClient) -> list:
     """Return tools from an MCP client, or [] on any failure."""
     try:

@@ -21,8 +21,10 @@ from agents.file_tools import ls, read_file, write_file, write_file_to_storage
 from agents.think_tool import think_tool
 from agents.prompts import (
     BEHAVIORAL_AGENT_PROMPT,
+    CONFLUENCE_AGENT_PROMPT,
     EXECUTION_AGENT_PROMPT,
     FEATURE_AGENT_PROMPT,
+    JIRA_AGENT_PROMPT,
     MISSING_SOURCE_NOTE,
     SUPPORT_AGENT_PROMPT,
     SYNTHESIS_AGENT_PROMPT,
@@ -31,6 +33,7 @@ from agents.state import DeepAgentState
 from db.supabase import get_all_tokens, update_pipeline_brief
 from integrations.connections import (
     build_amplitude_client,
+    build_atlassian_client,
     build_linear_client,
     build_productboard_client,
     build_zendesk_client,
@@ -48,6 +51,8 @@ AGENT_FILE_MAP: dict[str, str] = {
     "support": "support/zendesk_signals.md",
     "feature": "productboard/feature_intelligence.md",
     "execution": "linear/execution_reality.md",
+    "jira": "jira/jira_signals.md",
+    "confluence": "confluence/confluence_signals.md",
     "insights": "insights/customer_insights.md",
 }
 
@@ -253,6 +258,14 @@ async def run_signal_pipeline(
             "execution": (
                 _builder(build_linear_client, tokens["linear"]) if "linear" in tokens else None,
                 EXECUTION_AGENT_PROMPT.format(**fmt),
+            ),
+            "jira": (
+                _builder(build_atlassian_client, tokens["atlassian"]) if "atlassian" in tokens else None,
+                JIRA_AGENT_PROMPT.format(**fmt),
+            ),
+            "confluence": (
+                _builder(build_atlassian_client, tokens["atlassian"]) if "atlassian" in tokens else None,
+                CONFLUENCE_AGENT_PROMPT.format(**fmt),
             ),
         }
 
