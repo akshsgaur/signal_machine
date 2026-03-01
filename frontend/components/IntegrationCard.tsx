@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
 import { connectIntegration } from "@/lib/api";
 
@@ -55,12 +54,11 @@ export function IntegrationCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {logo && (
-            <Image
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               src={logo}
               alt={`${label} logo`}
-              width={32}
-              height={32}
-              className="rounded-md"
+              className="w-8 h-8 rounded-md object-contain"
             />
           )}
           <div>
