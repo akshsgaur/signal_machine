@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useUser } from "@clerk/nextjs";
+import { useClerk, useUser, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import {
   createInsightsFolder,
@@ -59,6 +59,7 @@ type ChatSession = {
 
 export default function WorkspacePage() {
   const { user, isLoaded } = useUser();
+  const { signOut } = useClerk();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("analysis");
   const [connected, setConnected] = useState<Record<string, boolean>>({});
@@ -385,12 +386,21 @@ export default function WorkspacePage() {
               </p>
             </div>
           </div>
-          <Link
-            href="/"
-            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            &lt;- Back
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              &lt;- Back
+            </Link>
+            <button
+              onClick={() => signOut({ redirectUrl: "/" })}
+              className="text-xs uppercase tracking-[0.2em] text-zinc-400 hover:text-white"
+            >
+              Log out
+            </button>
+            <UserButton afterSignOutUrl="/" />
+          </div>
         </div>
 
         <div className="flex items-start gap-6 relative">
