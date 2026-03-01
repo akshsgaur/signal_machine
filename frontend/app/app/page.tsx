@@ -449,6 +449,15 @@ export default function WorkspacePage() {
                 );
               })}
             </div>
+            <div className="pt-2 border-t border-zinc-800">
+              <Link
+                href="/connect"
+                className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors flex items-center justify-between"
+              >
+                <span>Manage Integrations</span>
+                <span className="text-zinc-500">→</span>
+              </Link>
+            </div>
           </aside>
 
           <section
