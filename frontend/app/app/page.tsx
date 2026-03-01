@@ -630,6 +630,27 @@ export default function WorkspacePage() {
                         );
                       })
                       .filter(Boolean)}
+
+                    {analysisData?.sources?.["insights"] && (
+                      <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-white font-semibold">Customer Insights</h3>
+                            <p className="text-sm text-zinc-400 mt-1">
+                              Themes from uploaded customer interviews
+                            </p>
+                          </div>
+                          <div className="text-xs text-emerald-400 font-medium">Morphik</div>
+                        </div>
+                        <div className="mt-3 rounded-lg border border-zinc-800 bg-black/30 p-4 text-sm text-zinc-200">
+                          <div className="prose prose-invert prose-sm max-w-none">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {analysisData.sources["insights"]}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
