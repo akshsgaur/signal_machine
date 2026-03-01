@@ -43,11 +43,17 @@ export async function getCodeSessionUrl(
   const res = await fetch(url.toString(), { credentials: "include" });
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
-  if (data?.token && typeof data.token === "string" && !data.url?.includes("token=")) {
-    data.url = `${data.url}${data.url.includes("?") ? "&" : "?"}token=${data.token}`;
-  }
-  if (data?.url && typeof data.url === "string" && data.url.startsWith("/")) {
-    data.url = `${API_URL}${data.url}`;
+  if (data?.url && typeof data.url === "string") {
+    const absoluteUrl = data.url.startsWith("/")
+      ? `${API_URL}${data.url}`
+      : data.url;
+    if (data?.token && typeof data.token === "string") {
+      const parsed = new URL(absoluteUrl);
+      parsed.searchParams.set("token", data.token);
+      data.url = parsed.toString();
+    } else {
+      data.url = absoluteUrl;
+    }
   }
   return data;
 }

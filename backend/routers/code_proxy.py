@@ -93,7 +93,8 @@ async def get_code_session(user_id: str):
     exp = int(time.time()) + CODE_TOKEN_TTL_SECONDS
     token = _sign_payload({"user_id": user_id, "exp": exp})
     path = f"/code/u/{user_id}/"
-    url = f"{CODE_PROXY_PUBLIC_BASE}{path}" if CODE_PROXY_PUBLIC_BASE else path
+    base_url = f"{CODE_PROXY_PUBLIC_BASE}{path}" if CODE_PROXY_PUBLIC_BASE else path
+    url = f"{base_url}?token={token}"
     response = JSONResponse({"url": url, "expires_at": exp, "token": token})
     response.set_cookie(
         "code_token",
