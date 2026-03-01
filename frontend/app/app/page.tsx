@@ -204,7 +204,7 @@ export default function WorkspacePage() {
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === "agent_update" && msg.status === "complete") {
-            setAgentDone((prev) => new Set([...prev, msg.agent]));
+            setAgentDone((prev) => new Set(Array.from(prev).concat(msg.agent)));
           }
           if (msg.type === "status" && (msg.status === "complete" || msg.status === "failed" || msg.status === "timeout")) {
             es.close();
