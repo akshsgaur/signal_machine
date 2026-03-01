@@ -1,14 +1,4 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
-
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/auth(.*)",
-  "/favicon.ico",
-  "/_next(.*)",
-]);
 
 const isProtectedRoute = createRouteMatcher([
   "/app(.*)",
@@ -17,16 +7,6 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware((auth, req) => {
-  const { pathname, searchParams } = req.nextUrl;
-  if (pathname === "/") {
-    return NextResponse.next();
-  }
-  if (pathname === "/sign-in" || pathname === "/sign-up") {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
-  if ((pathname === "/auth/sign-in" || pathname === "/auth/sign-up") && searchParams.get("allow") !== "1") {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
   if (isProtectedRoute(req)) auth.protect();
 });
 
