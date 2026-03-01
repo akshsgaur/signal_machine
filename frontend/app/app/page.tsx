@@ -12,11 +12,13 @@ import {
   getIntegrations,
   getLatestAnalysis,
   getCodeSessionUrl,
+  getStreamUrl,
   listChatMessages,
   listChatSessions,
   listCustomerDocs,
   listInsightsFolders,
   sendChat,
+  startRun,
   uploadCustomerDocs,
 } from "@/lib/api";
 
@@ -75,6 +77,9 @@ export default function WorkspacePage() {
   const [codeSessionUrl, setCodeSessionUrl] = useState("");
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentDone, setAgentDone] = useState<Set<string>>(new Set());
+  const [agentRunError, setAgentRunError] = useState("");
   const [insightsUploading, setInsightsUploading] = useState(false);
   const [insightsError, setInsightsError] = useState("");
   const [insightsFolders, setInsightsFolders] = useState<
@@ -182,6 +187,46 @@ export default function WorkspacePage() {
       setAnalysisLoading(false);
     }
   }, [user]);
+
+  const runDeepAgent = useCallback(async () => {
+    if (!user || agentRunning) return;
+    setAgentRunning(true);
+    setAgentDone(new Set());
+    setAgentRunError("");
+    try {
+      const runId = await startRun(
+        user.id,
+        "Analyze all product signals and customer feedback to surface key trends, risks, and opportunities",
+        "All"
+      );
+      const es = new EventSource(getStreamUrl(runId));
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === "agent_update" && msg.status === "complete") {
+            setAgentDone((prev) => new Set([...prev, msg.agent]));
+          }
+          if (msg.type === "status" && (msg.status === "complete" || msg.status === "failed" || msg.status === "timeout")) {
+            es.close();
+            setAgentRunning(false);
+            if (msg.status === "complete") {
+              refreshAnalysis();
+            } else {
+              setAgentRunError("Run ended with status: " + msg.status);
+            }
+          }
+        } catch {}
+      };
+      es.onerror = () => {
+        es.close();
+        setAgentRunning(false);
+        setAgentRunError("Connection lost. Try again.");
+      };
+    } catch (err: unknown) {
+      setAgentRunning(false);
+      setAgentRunError(err instanceof Error ? err.message : "Failed to start run");
+    }
+  }, [user, agentRunning, refreshAnalysis]);
 
   useEffect(() => {
     refreshAnalysis();
@@ -481,8 +526,48 @@ export default function WorkspacePage() {
                     >
                       Refresh
                     </button>
+                    <button
+                      onClick={runDeepAgent}
+                      disabled={agentRunning}
+                      className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {agentRunning ? (
+                        <>
+                          <span className="h-2 w-2 rounded-full bg-black animate-pulse" />
+                          Running…
+                        </>
+                      ) : "Run Deep Agent"}
+                    </button>
                   </div>
                 </div>
+
+                {agentRunning && (
+                  <div className="mb-4 flex flex-wrap gap-3">
+                    {[
+                      { key: "behavioral", label: "Amplitude" },
+                      { key: "support", label: "Zendesk" },
+                      { key: "feature", label: "Productboard" },
+                      { key: "execution", label: "Linear" },
+                      { key: "insights", label: "Customer Insights" },
+                    ].map(({ key, label }) => (
+                      <span
+                        key={key}
+                        className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full border ${
+                          agentDone.has(key)
+                            ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10"
+                            : "border-zinc-700 text-zinc-500 bg-zinc-800/50"
+                        }`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${agentDone.has(key) ? "bg-emerald-400" : "bg-zinc-600 animate-pulse"}`} />
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {agentRunError && (
+                  <div className="mb-3 text-sm text-red-400">{agentRunError}</div>
+                )}
 
                 {analysisError && (
                   <div className="mb-3 text-sm text-red-400">{analysisError}</div>

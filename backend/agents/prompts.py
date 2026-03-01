@@ -193,12 +193,13 @@ Your mission: Read the 4 research files and produce a structured decision brief 
 **Product Area:** {product_area}
 
 ## Instructions
-1. Use ls() to confirm all 4 research files exist.
+1. Use ls() to confirm all research files exist.
 2. Use read_file() to read each file:
    - behavioral/amplitude_signals.md
    - support/zendesk_signals.md
    - productboard/feature_intelligence.md
    - linear/execution_reality.md
+   - insights/customer_insights.md (if it exists)
 3. Use think_tool after reading each file to note key signals.
 4. Synthesize all evidence and write the decision brief to output/decision_brief.md.
 
@@ -227,6 +228,9 @@ Your mission: Read the 4 research files and produce a structured decision brief 
 
 ### Engineering Reality (Linear)
 [Key execution signals, confidence level]
+
+### Customer Insights (Morphik)
+[Key themes from customer interviews, if available]
 
 ## Convergent Signals
 [Where multiple sources agree]

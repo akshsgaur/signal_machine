@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from datetime import datetime
 from typing import Callable
+
+import httpx
 
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
@@ -37,11 +40,15 @@ from integrations.connections import (
 # Agent file destinations — also used by SSE to detect completion
 # ---------------------------------------------------------------------------
 
+MORPHIK_BASE_URL = os.getenv("MORPHIK_BASE_URL", "https://api.morphik.ai")
+MORPHIK_API_KEY = os.getenv("MORPHIK_API_KEY")
+
 AGENT_FILE_MAP: dict[str, str] = {
     "behavioral": "behavioral/amplitude_signals.md",
     "support": "support/zendesk_signals.md",
     "feature": "productboard/feature_intelligence.md",
     "execution": "linear/execution_reality.md",
+    "insights": "insights/customer_insights.md",
 }
 
 
@@ -127,6 +134,81 @@ async def _run_agent(
         return (name, {fallback_key: content})
 
 
+async def _fetch_morphik_insights(
+    user_id: str,
+    run_id: str,
+    hypothesis: str,
+    product_area: str,
+) -> tuple[str, dict[str, str]]:
+    """Fetch customer insights from Morphik and write to storage. Never raises."""
+    file_key = "insights/customer_insights.md"
+    _print_progress("Phase 1", "insights", "start")
+    t0 = time.time()
+
+    if not MORPHIK_API_KEY:
+        content = MISSING_SOURCE_NOTE.format(source="Customer Insights (Morphik)")
+        write_file_to_storage(run_id, file_key, content)
+        _print_progress("Phase 1", "insights", "done", "no Morphik key configured")
+        return ("insights", {file_key: content})
+
+    queries = [
+        f"user feedback and pain points related to {product_area}",
+        f"feature requests and product improvements for {product_area}",
+        f"customer satisfaction and key themes from interviews",
+    ]
+
+    all_excerpts: list[str] = []
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            for query in queries:
+                payload = {
+                    "query": query,
+                    "k": 5,
+                    "min_score": 0.0,
+                    "use_colpali": True,
+                    "output_format": "text",
+                    "filters": {
+                        "user_id": {"$eq": user_id},
+                        "source": {"$eq": "customer_interview"},
+                    },
+                }
+                resp = await client.post(
+                    f"{MORPHIK_BASE_URL}/retrieve/chunks",
+                    headers={"Authorization": f"Bearer {MORPHIK_API_KEY}"},
+                    json=payload,
+                )
+                if resp.status_code < 400:
+                    for item in resp.json() or []:
+                        chunk = (item.get("content") or "").strip()
+                        filename = item.get("filename") or "document"
+                        if chunk and len(chunk) > 20:
+                            all_excerpts.append(f"**[{filename}]** {chunk[:600]}")
+    except Exception as exc:
+        _print_progress("Phase 1", "insights", "done", f"Morphik error: {exc}")
+        content = MISSING_SOURCE_NOTE.format(source="Customer Insights (Morphik)") + f"\n\nError: {exc}"
+        write_file_to_storage(run_id, file_key, content)
+        return ("insights", {file_key: content})
+
+    if not all_excerpts:
+        content = (
+            "# Customer Insights — Morphik\n\n"
+            "No customer interview documents found. "
+            "Upload interviews in the Customer Insights tab to include them in future runs."
+        )
+    else:
+        seen: set[str] = set()
+        unique = [e for e in all_excerpts if not (e in seen or seen.add(e))]  # type: ignore[func-returns-value]
+        content = (
+            f"# Customer Insights — Morphik Analysis\n\n"
+            f"## Overview\n{len(unique)} relevant excerpts retrieved from customer interviews.\n\n"
+            f"## Key Excerpts\n\n" + "\n\n---\n\n".join(unique[:12])
+        )
+
+    write_file_to_storage(run_id, file_key, content)
+    _print_progress("Phase 1", "insights", "done", f"{len(all_excerpts)} excerpts, {time.time()-t0:.1f}s")
+    return ("insights", {file_key: content})
+
+
 async def run_signal_pipeline(
     run_id: str,
     user_id: str,
@@ -190,6 +272,7 @@ async def run_signal_pipeline(
                 )
                 for name, (client_builder, prompt) in research_config.items()
             ],
+            _fetch_morphik_insights(user_id, run_id, hypothesis, product_area),
             return_exceptions=True,
         )
 
