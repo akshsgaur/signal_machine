@@ -228,7 +228,7 @@ async def run_signal_pipeline(
 
         # 2. Shared model + base tools — use user-configured key/model if set
         openai_api_key = tokens.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
-        openai_model = tokens.get("openai_model") or "gpt-4o-mini"
+        openai_model = tokens.get("openai_model") or "gpt-5.2"
         model = ChatOpenAI(model=openai_model, api_key=openai_api_key, temperature=0.0)
         base_tools = [ls, read_file, write_file, think_tool]
         fmt = dict(hypothesis=hypothesis, product_area=product_area)

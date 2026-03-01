@@ -7,10 +7,11 @@ import { IntegrationCard } from "@/components/IntegrationCard";
 import { connectIntegration, getIntegrations, getSlackConnectUrl } from "@/lib/api";
 
 const OPENAI_MODELS = [
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4o-mini", label: "GPT-4o mini" },
-  { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-  { value: "o1-mini", label: "o1 mini" },
+  { value: "gpt-5.2", label: "GPT-5.2" },
+  { value: "gpt-5-nano", label: "GPT-5 Nano" },
+  { value: "gpt-5-mini", label: "GPT-5 Mini" },
+  { value: "gpt-5.2-pro", label: "GPT-5.2 Pro" },
+  { value: "gpt-5", label: "GPT-5" },
 ];
 
 const INTEGRATIONS = [
@@ -39,7 +40,7 @@ const INTEGRATIONS = [
 export default function ConnectPage() {
   const { user, isLoaded } = useUser();
   const [connected, setConnected] = useState<Record<string, boolean>>({});
-  const [aiModel, setAiModel] = useState("gpt-4o-mini");
+  const [aiModel, setAiModel] = useState("gpt-5.2");
   const [aiKey, setAiKey] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
