@@ -544,12 +544,13 @@ export default function WorkspacePage() {
                 {agentRunning && (
                   <div className="mb-4 flex flex-wrap gap-3">
                     {[
-                      { key: "behavioral", label: "Amplitude" },
-                      { key: "support", label: "Zendesk" },
-                      { key: "feature", label: "Productboard" },
-                      { key: "execution", label: "Linear" },
-                      { key: "insights", label: "Customer Insights" },
-                    ].map(({ key, label }) => (
+                      { key: "behavioral", label: "Amplitude", integration: "amplitude" },
+                      { key: "support", label: "Zendesk", integration: "zendesk" },
+                      { key: "feature", label: "Productboard", integration: "productboard" },
+                      { key: "execution", label: "Linear", integration: "linear" },
+                      { key: "insights", label: "Customer Insights", integration: null },
+                    ].filter(({ integration }) => integration === null || connected[integration])
+                    .map(({ key, label }) => (
                       <span
                         key={key}
                         className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full border ${
