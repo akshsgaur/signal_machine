@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { SignedIn, SignedOut, useClerk, useUser, UserButton } from "@clerk/nextjs";
+import { useClerk, useUser, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import {
   createInsightsFolder,
@@ -414,14 +414,14 @@ export default function WorkspacePage() {
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-white">
-      <SignedOut>
+      {(!isLoaded || !user) && (
         <div className="min-h-screen flex items-center justify-center px-6 text-center">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6 text-sm text-zinc-300">
             Redirecting to sign in...
           </div>
         </div>
-      </SignedOut>
-      <SignedIn>
+      )}
+      {isLoaded && user && (
       <div className="w-full px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -454,7 +454,7 @@ export default function WorkspacePage() {
                 Log out
               </button>
             )}
-            <UserButton afterSignOutUrl="/" />
+            <UserButton />
           </div>
         </div>
 
@@ -1042,7 +1042,7 @@ export default function WorkspacePage() {
           </section>
         </div>
       </div>
-      </SignedIn>
+      )}
     </main>
   );
 }
