@@ -39,7 +39,7 @@ if frontend_url:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(dict.fromkeys(cors_origins)),
-    allow_origin_regex=r"^https?://(localhost|127\\.0\\.0\\.1)(:3000|:3001)?$|^https://.*\\.up\\.railway\\.app$",
+    allow_origin_regex=r"^https?://(localhost|127\\.0\\.0\\.1)(:3000|:3001)?$|^https://.*\\.up\\.railway\\.app$|^https://.*\\.vercel\\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
