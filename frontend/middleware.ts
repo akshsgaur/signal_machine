@@ -1,7 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export const runtime = "nodejs";
-
 const isProtectedRoute = createRouteMatcher([
   "/app(.*)",
   "/connect(.*)",

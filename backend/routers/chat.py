@@ -133,8 +133,6 @@ async def chat(request: ChatRequest):
             message_text = "I could not generate a response. Please try again."
 
         sources_used = extract_sources_used(result, tool_to_source)
-        if not sources_used:
-            sources_used = connected_sources
 
         await add_chat_message(session_id, "assistant", message_text, sources_used)
         await touch_chat_session(session_id)
