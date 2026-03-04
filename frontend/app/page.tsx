@@ -47,7 +47,7 @@ export default function Home() {
 
           <section className="mx-auto mt-20 max-w-3xl text-center">
             <h1 className="text-4xl md:text-6xl font-semibold tracking-tight">
-              Cursor for Product Manager
+              Cursor for Product Management
             </h1>
             <p className="mt-4 text-sm md:text-base text-zinc-400">
               Build on live product signals across support, analytics, delivery, and
