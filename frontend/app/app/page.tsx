@@ -529,12 +529,7 @@ export default function WorkspacePage() {
     user?.firstName?.[0]?.toUpperCase() ??
     user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
     "S";
-  const analysisSourceCount = Object.keys(analysisData?.sources ?? {}).length;
-  const analysisReady =
-    connectedIntegrations.length > 0 &&
-    !!analysisData &&
-    analysisData.status !== "none" &&
-    analysisSourceCount > 0;
+  const workspaceName = user?.firstName ? `${user.firstName}'s Workspace` : "Workspace";
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -564,15 +559,9 @@ export default function WorkspacePage() {
               {sidebarOpen ? "←" : "≡"}
             </button>
             <div>
-              <div className="text-xs font-medium uppercase tracking-[0.24em] text-zinc-500">
-                StarSignals Workspace
-              </div>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">
-                Product intelligence
+                {workspaceName}
               </h1>
-              <p className="mt-1 text-sm text-zinc-500">
-                Connected signals, analysis, and workspace tools in one place.
-              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -691,10 +680,7 @@ export default function WorkspacePage() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-semibold text-white">Deep Analysis</h2>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      Signals collected from your connected product stack.
-                    </p>
+                    <h2 className="text-xl font-semibold text-white">Dashboard</h2>
                   </div>
                   <button
                     onClick={refreshAnalysis}
@@ -702,27 +688,6 @@ export default function WorkspacePage() {
                   >
                     Refresh
                   </button>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-2xl border border-zinc-800 bg-black p-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Sources</div>
-                    <div className="mt-2 text-2xl font-semibold text-white">
-                      {connectedIntegrations.length}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-zinc-800 bg-black p-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Status</div>
-                    <div className="mt-2 text-2xl font-semibold text-white">
-                      {analysisReady ? "Ready" : connectedIntegrations.length === 0 ? "Setup" : "Running"}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-zinc-800 bg-black p-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Coverage</div>
-                    <div className="mt-2 text-2xl font-semibold text-white">
-                      {analysisSourceCount}
-                    </div>
-                  </div>
                 </div>
 
                 {agentRunning && (
