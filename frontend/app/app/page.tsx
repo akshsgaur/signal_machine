@@ -62,7 +62,8 @@ type ChatSession = {
 const SIDEBAR_MIN_WIDTH = 248;
 const SIDEBAR_MAX_WIDTH = 380;
 const SIDEBAR_DEFAULT_WIDTH = 288;
-const SIDEBAR_HOVER_OPEN_DELAY_MS = 3000;
+const SIDEBAR_PINNED_STORAGE_KEY = "signal-sidebar-pinned";
+const SIDEBAR_WIDTH_STORAGE_KEY = "signal-sidebar-width";
 
 export default function WorkspacePage() {
   const { user, isLoaded } = useUser();
@@ -82,6 +83,7 @@ export default function WorkspacePage() {
   const [sidebarHovering, setSidebarHovering] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [sidebarHydrated, setSidebarHydrated] = useState(false);
   const [builderFullscreen, setBuilderFullscreen] = useState(false);
   const [codeSessionUrl, setCodeSessionUrl] = useState("");
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -123,7 +125,6 @@ export default function WorkspacePage() {
   ]);
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
   const autoRunAttemptedRef = useRef(false);
-  const sidebarHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sidebarResizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT_WIDTH });
 
   useEffect(() => {
@@ -133,31 +134,41 @@ export default function WorkspacePage() {
   }, [isLoaded, router, user]);
 
   useEffect(() => {
-    if (sidebarOpen) {
+    try {
+      const storedPinned = window.localStorage.getItem(SIDEBAR_PINNED_STORAGE_KEY);
+      const storedWidth = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+      if (storedPinned === "true" || storedPinned === "false") {
+        setSidebarOpen(storedPinned === "true");
+      }
+      if (storedWidth) {
+        const parsedWidth = Number(storedWidth);
+        if (!Number.isNaN(parsedWidth)) {
+          setSidebarWidth(
+            Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, parsedWidth))
+          );
+        }
+      }
+    } finally {
+      setSidebarHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (sidebarOpen) return;
+    if (!sidebarHovering && sidebarPeekOpen) {
       setSidebarPeekOpen(false);
-      if (sidebarHoverTimeoutRef.current) {
-        clearTimeout(sidebarHoverTimeoutRef.current);
-        sidebarHoverTimeoutRef.current = null;
-      }
-      return;
     }
+  }, [sidebarHovering, sidebarOpen, sidebarPeekOpen]);
 
-    if (sidebarHovering) {
-      if (!sidebarHoverTimeoutRef.current) {
-        sidebarHoverTimeoutRef.current = setTimeout(() => {
-          setSidebarPeekOpen(true);
-          sidebarHoverTimeoutRef.current = null;
-        }, SIDEBAR_HOVER_OPEN_DELAY_MS);
-      }
-      return;
-    }
+  useEffect(() => {
+    if (!sidebarHydrated) return;
+    window.localStorage.setItem(SIDEBAR_PINNED_STORAGE_KEY, String(sidebarOpen));
+  }, [sidebarHydrated, sidebarOpen]);
 
-    if (sidebarHoverTimeoutRef.current) {
-      clearTimeout(sidebarHoverTimeoutRef.current);
-      sidebarHoverTimeoutRef.current = null;
-    }
-    setSidebarPeekOpen(false);
-  }, [sidebarHovering, sidebarOpen]);
+  useEffect(() => {
+    if (!sidebarHydrated) return;
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+  }, [sidebarHydrated, sidebarWidth]);
 
   useEffect(() => {
     if (!isResizingSidebar) return;
@@ -187,14 +198,6 @@ export default function WorkspacePage() {
       document.body.style.userSelect = "";
     };
   }, [isResizingSidebar]);
-
-  useEffect(() => {
-    return () => {
-      if (sidebarHoverTimeoutRef.current) {
-        clearTimeout(sidebarHoverTimeoutRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -521,7 +524,6 @@ export default function WorkspacePage() {
   }
 
   const isSidebarVisible = sidebarOpen || sidebarPeekOpen;
-  const pinnedSidebarOffset = sidebarOpen ? sidebarWidth + 24 : 0;
   const userBadge =
     user?.firstName?.[0]?.toUpperCase() ??
     user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
@@ -544,6 +546,7 @@ export default function WorkspacePage() {
       )}
       {isLoaded && user && (
       <div className="w-full bg-black px-4 py-5">
+        <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
@@ -589,13 +592,25 @@ export default function WorkspacePage() {
 
         <div className="relative min-h-[calc(100vh-120px)]">
           <div
-            className="fixed left-0 top-[92px] bottom-6 z-20 w-5"
-            onMouseEnter={() => setSidebarHovering(true)}
-            onMouseLeave={() => setSidebarHovering(false)}
+            className="fixed left-0 top-0 bottom-0 z-20 w-8"
+            onMouseEnter={() => {
+              setSidebarHovering(true);
+              if (!sidebarOpen) setSidebarPeekOpen(true);
+            }}
+            onMouseLeave={() => {
+              setSidebarHovering(false);
+              if (!sidebarOpen) setSidebarPeekOpen(false);
+            }}
           />
           <aside
-            onMouseEnter={() => setSidebarHovering(true)}
-            onMouseLeave={() => setSidebarHovering(false)}
+            onMouseEnter={() => {
+              setSidebarHovering(true);
+              if (!sidebarOpen) setSidebarPeekOpen(true);
+            }}
+            onMouseLeave={() => {
+              setSidebarHovering(false);
+              if (!sidebarOpen) setSidebarPeekOpen(false);
+            }}
             className="fixed left-4 top-[92px] bottom-6 z-30 overflow-hidden rounded-[24px] border border-zinc-800 bg-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out"
             style={{
               width: sidebarWidth,
@@ -678,10 +693,7 @@ export default function WorkspacePage() {
             </div>
           </aside>
 
-          <section
-            className="space-y-6 transition-[padding] duration-300 ease-out"
-            style={{ paddingLeft: pinnedSidebarOffset }}
-          >
+          <section className="space-y-6">
             {activeTab === "analysis" && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1253,6 +1265,7 @@ export default function WorkspacePage() {
               </div>
             )}
           </section>
+        </div>
         </div>
       </div>
       )}
