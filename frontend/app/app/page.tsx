@@ -28,7 +28,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "analysis", label: "Deep Analysis" },
   { key: "chat", label: "Chat" },
   { key: "insights", label: "Customer Insights" },
-  { key: "builder", label: "Build with Claude Code" },
+  { key: "builder", label: "Build With An Coding Agent" },
   { key: "profile", label: "Profile" },
 ];
 
@@ -1106,7 +1106,7 @@ export default function WorkspacePage() {
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-xl font-semibold">Build with Claude Code</h2>
+                    <h2 className="text-xl font-semibold">Build With An Coding Agent</h2>
                     <p className="text-sm text-zinc-400">
                       Vibe code with insights from your product data.
                     </p>
