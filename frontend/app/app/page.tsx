@@ -524,6 +524,7 @@ export default function WorkspacePage() {
   }
 
   const isSidebarVisible = sidebarOpen || sidebarPeekOpen;
+  const contentInset = SIDEBAR_DEFAULT_WIDTH + 48;
   const userBadge =
     user?.firstName?.[0]?.toUpperCase() ??
     user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
@@ -546,7 +547,10 @@ export default function WorkspacePage() {
       )}
       {isLoaded && user && (
       <div className="w-full bg-black px-4 py-5">
-        <div className="mx-auto max-w-6xl">
+        <div
+          className="mx-auto max-w-6xl"
+          style={{ paddingLeft: contentInset }}
+        >
         <div className="mb-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
