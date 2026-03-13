@@ -525,10 +525,6 @@ export default function WorkspacePage() {
 
   const isSidebarVisible = sidebarOpen || sidebarPeekOpen;
   const contentInset = 0;
-  const userBadge =
-    user?.firstName?.[0]?.toUpperCase() ??
-    user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
-    "S";
   const workspaceName = user?.firstName ? `${user.firstName}'s Workspace` : "Workspace";
 
   return (
@@ -613,22 +609,6 @@ export default function WorkspacePage() {
             }}
           >
             <div className="flex h-full flex-col">
-              <div className="border-b border-zinc-800 px-4 py-4">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-base font-semibold text-black">
-                    {userBadge}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-lg font-semibold text-white">
-                      StarSignals
-                    </div>
-                    <div className="truncate text-xs text-zinc-500">
-                      PM operating system
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="flex-1 overflow-y-auto px-3 py-4">
                 <div className="px-3 text-xs uppercase tracking-[0.22em] text-zinc-600">
                   Workspace
