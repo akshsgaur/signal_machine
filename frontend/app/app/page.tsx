@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useClerk, useUser, UserButton } from "@clerk/nextjs";
@@ -25,9 +25,9 @@ import {
 type TabKey = "analysis" | "chat" | "insights" | "builder" | "profile";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: "analysis", label: "Deep Analysis" },
+  { key: "analysis", label: "Dashboard" },
   { key: "chat", label: "Chat" },
-  { key: "insights", label: "Customer Insights" },
+  { key: "insights", label: "Insights" },
   { key: "builder", label: "Build With An Coding Agent" },
   { key: "profile", label: "Profile" },
 ];
@@ -59,6 +59,40 @@ type ChatSession = {
   updated_at?: string | null;
 };
 
+type SidebarAction =
+  | "scroll-overview"
+  | "scroll-connected-tools"
+  | "scroll-latest-brief"
+  | "scroll-run-status"
+  | "new-chat"
+  | "open-chat-session"
+  | "show-all-files"
+  | "show-folder"
+  | "new-folder"
+  | "open-builder"
+  | "open-builder-tab"
+  | "open-builder-fullscreen"
+  | "manage-integrations"
+  | "sign-out";
+
+type SidebarContextItem = {
+  key: string;
+  label: string;
+  action?: SidebarAction;
+  payload?: string;
+  href?: string;
+  badge?: string;
+  active?: boolean;
+  disabled?: boolean;
+};
+
+type SidebarContextGroup = {
+  key: string;
+  label: string;
+  items: SidebarContextItem[];
+  chips?: Array<{ key: string; label: string; tone?: "default" | "accent" }>;
+};
+
 const SIDEBAR_MIN_WIDTH = 248;
 const SIDEBAR_MAX_WIDTH = 380;
 const SIDEBAR_DEFAULT_WIDTH = 288;
@@ -81,6 +115,7 @@ export default function WorkspacePage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarPeekOpen, setSidebarPeekOpen] = useState(false);
   const [sidebarHovering, setSidebarHovering] = useState(false);
+  const [sidebarTriggerHovering, setSidebarTriggerHovering] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [sidebarHydrated, setSidebarHydrated] = useState(false);
@@ -129,6 +164,10 @@ export default function WorkspacePage() {
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
   const autoRunAttemptedRef = useRef(false);
   const sidebarResizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT_WIDTH });
+  const overviewRef = useRef<HTMLDivElement | null>(null);
+  const connectedToolsRef = useRef<HTMLDivElement | null>(null);
+  const latestBriefRef = useRef<HTMLDivElement | null>(null);
+  const runStatusRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (isLoaded && !user) {
@@ -158,10 +197,10 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (sidebarOpen) return;
-    if (!sidebarHovering && sidebarPeekOpen) {
+    if (!sidebarHovering && !sidebarTriggerHovering && sidebarPeekOpen) {
       setSidebarPeekOpen(false);
     }
-  }, [sidebarHovering, sidebarOpen, sidebarPeekOpen]);
+  }, [sidebarHovering, sidebarOpen, sidebarPeekOpen, sidebarTriggerHovering]);
 
   useEffect(() => {
     if (!sidebarHydrated) return;
@@ -416,14 +455,6 @@ export default function WorkspacePage() {
     }
   }, []);
 
-  if (!isLoaded) {
-    return (
-      <main className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center">
-        <div className="text-sm text-zinc-400">Loading...</div>
-      </main>
-    );
-  }
-
   async function sendMessage() {
     const content = chatInput.trim();
     if (!content) return;
@@ -543,9 +574,253 @@ export default function WorkspacePage() {
     handleCreateFolder(name);
   }
 
-  const isSidebarVisible = sidebarOpen || sidebarPeekOpen;
-  const contentInset = 0;
+  function scrollToSection(ref: RefObject<HTMLDivElement | null>) {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function handleSidebarAction(action?: SidebarAction, payload?: string) {
+    if (!action) return;
+    switch (action) {
+      case "scroll-overview":
+        scrollToSection(overviewRef);
+        break;
+      case "scroll-connected-tools":
+        scrollToSection(connectedToolsRef);
+        break;
+      case "scroll-latest-brief":
+        if (latestBriefRef.current) {
+          scrollToSection(latestBriefRef);
+        } else {
+          scrollToSection(connectedToolsRef);
+        }
+        break;
+      case "scroll-run-status":
+        scrollToSection(runStatusRef);
+        break;
+      case "new-chat":
+        startNewChat();
+        setActiveTab("chat");
+        break;
+      case "open-chat-session":
+        if (payload) {
+          setActiveTab("chat");
+          await loadSession(payload);
+        }
+        break;
+      case "show-all-files":
+        setActiveFolder(null);
+        setActiveTab("insights");
+        break;
+      case "show-folder":
+        if (payload) {
+          setActiveFolder(payload);
+          setActiveTab("insights");
+        }
+        break;
+      case "new-folder":
+        setActiveTab("insights");
+        handleMenuCreateFolder();
+        break;
+      case "open-builder":
+        if (codeSessionUrl) {
+          window.open(codeSessionUrl, "_blank", "noopener,noreferrer");
+        }
+        break;
+      case "open-builder-tab":
+        setActiveTab("builder");
+        break;
+      case "open-builder-fullscreen":
+        if (codeSessionUrl) {
+          setActiveTab("builder");
+          setBuilderFullscreen(true);
+        }
+        break;
+      case "manage-integrations":
+        router.push("/connect");
+        break;
+      case "sign-out":
+        await signOut({ redirectUrl: "/" });
+        break;
+      default:
+        break;
+    }
+  }
+
+  const isSidebarPinned = sidebarOpen;
+  const isSidebarPeeking = !sidebarOpen && sidebarPeekOpen;
+  const isSidebarVisible = isSidebarPinned || isSidebarPeeking;
+  const contentInset = isSidebarPinned ? sidebarWidth + 16 : 0;
   const workspaceName = user?.firstName ? `${user.firstName}'s Workspace` : "Workspace";
+  const activeTabLabel = TABS.find((tab) => tab.key === activeTab)?.label ?? "Workspace";
+
+  const sidebarContextGroups = useMemo<SidebarContextGroup[]>(() => {
+    if (activeTab === "analysis") {
+      return [
+        {
+          key: "dashboard",
+          label: "Dashboard",
+          items: [
+            { key: "overview", label: "Overview", action: "scroll-overview", active: true },
+            {
+              key: "connected-tools",
+              label: "Connected tools",
+              action: "scroll-connected-tools",
+              badge: `${connectedIntegrations.length}`,
+            },
+            {
+              key: "latest-brief",
+              label: "Latest brief",
+              action: "scroll-latest-brief",
+              disabled: !analysisData?.brief && !hasSourceAnalysis,
+            },
+            {
+              key: "run-status",
+              label: "Run status",
+              action: "scroll-run-status",
+              badge: agentRunning ? "Running" : analysisData?.status ?? "Idle",
+            },
+          ],
+          chips: [
+            {
+              key: "integrations",
+              label: `${connectedIntegrations.length} connected`,
+              tone: connectedIntegrations.length > 0 ? "accent" : "default",
+            },
+            {
+              key: "analysis-status",
+              label: agentRunning ? "Analysis running" : analysisData?.status ?? "No run",
+              tone: agentRunning || analysisData?.status === "complete" ? "accent" : "default",
+            },
+          ],
+        },
+      ];
+    }
+
+    if (activeTab === "chat") {
+      return [
+        {
+          key: "chat-actions",
+          label: "Chat",
+          items: [
+            { key: "new-chat", label: "New chat", action: "new-chat" },
+            ...chatSessions.map((session) => ({
+              key: session.id,
+              label: session.title ?? "Untitled chat",
+              action: "open-chat-session" as SidebarAction,
+              payload: session.id,
+              active: session.id === chatSessionId,
+            })),
+          ],
+        },
+      ];
+    }
+
+    if (activeTab === "insights") {
+      return [
+        {
+          key: "insights-folders",
+          label: "Insights",
+          items: [
+            {
+              key: "all-files",
+              label: "All files",
+              action: "show-all-files",
+              active: !activeFolder,
+            },
+            ...insightsFolders.map((folder) => ({
+              key: folder.id,
+              label: folder.name,
+              action: "show-folder" as SidebarAction,
+              payload: folder.name,
+              active: activeFolder === folder.name,
+            })),
+            { key: "new-folder", label: "New folder", action: "new-folder" },
+          ],
+        },
+      ];
+    }
+
+    if (activeTab === "builder") {
+      return [
+        {
+          key: "builder-actions",
+          label: "Builder",
+          items: [
+            { key: "ide", label: "IDE", action: "open-builder-tab", active: true },
+            {
+              key: "open-new-tab",
+              label: "Open in new tab",
+              action: "open-builder",
+              disabled: !codeSessionUrl,
+            },
+            {
+              key: "fullscreen",
+              label: "Fullscreen",
+              action: "open-builder-fullscreen",
+              disabled: !codeSessionUrl,
+            },
+          ],
+          chips: [
+            {
+              key: "builder-status",
+              label: codeSessionLoading
+                ? "Booting"
+                : codeSessionError
+                  ? "Error"
+                  : codeSessionUrl
+                    ? "Ready"
+                    : "Unavailable",
+              tone:
+                codeSessionLoading || codeSessionUrl
+                  ? "accent"
+                  : "default",
+            },
+          ],
+        },
+      ];
+    }
+
+    if (activeTab === "profile") {
+      return [
+        {
+          key: "profile-actions",
+          label: "Profile",
+          items: [
+            { key: "account", label: "Account", active: true },
+            {
+              key: "manage-integrations",
+              label: "Manage integrations",
+              action: "manage-integrations",
+            },
+            { key: "sign-out", label: "Sign out", action: "sign-out" },
+          ],
+        },
+      ];
+    }
+
+    return [];
+  }, [
+    activeFolder,
+    activeTab,
+    agentRunning,
+    analysisData,
+    chatSessionId,
+    chatSessions,
+    codeSessionError,
+    codeSessionLoading,
+    codeSessionUrl,
+    connectedIntegrations,
+    hasSourceAnalysis,
+    insightsFolders,
+  ]);
+
+  if (!isLoaded) {
+    return (
+      <main className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center">
+        <div className="text-sm text-zinc-400">Loading...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -559,20 +834,25 @@ export default function WorkspacePage() {
       {isLoaded && user && (
       <div className="w-full bg-black px-4 py-5">
         <div
-          className="mx-auto max-w-6xl"
+          className="mx-auto w-full max-w-[1440px] transition-[padding-left] duration-300 ease-out"
           style={{ paddingLeft: contentInset }}
         >
         <div className="mb-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
               onClick={() => {
+                if (isSidebarPeeking) {
+                  setSidebarOpen(true);
+                  setSidebarPeekOpen(false);
+                  return;
+                }
                 setSidebarOpen((current) => !current);
                 setSidebarPeekOpen(false);
               }}
               className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-black text-zinc-300 hover:border-zinc-700 hover:text-white"
               aria-label={sidebarOpen ? "Close menu" : "Open menu"}
             >
-              {sidebarOpen ? "←" : "≡"}
+              {"≡"}
             </button>
             <div>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">
@@ -601,14 +881,13 @@ export default function WorkspacePage() {
 
         <div className="relative min-h-[calc(100vh-120px)]">
           <div
-            className="fixed left-0 top-0 bottom-0 z-20 w-8"
+            className="fixed left-0 top-0 bottom-0 z-20 w-6"
             onMouseEnter={() => {
-              setSidebarHovering(true);
+              setSidebarTriggerHovering(true);
               if (!sidebarOpen) setSidebarPeekOpen(true);
             }}
             onMouseLeave={() => {
-              setSidebarHovering(false);
-              if (!sidebarOpen) setSidebarPeekOpen(false);
+              setSidebarTriggerHovering(false);
             }}
           />
           <aside
@@ -620,7 +899,9 @@ export default function WorkspacePage() {
               setSidebarHovering(false);
               if (!sidebarOpen) setSidebarPeekOpen(false);
             }}
-            className="fixed left-4 top-[92px] bottom-6 z-30 overflow-hidden rounded-[24px] border border-zinc-800 bg-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out"
+            className={`fixed left-4 top-[92px] bottom-6 z-30 overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out ${
+              isSidebarPeeking ? "backdrop-blur-sm" : ""
+            }`}
             style={{
               width: sidebarWidth,
               transform: isSidebarVisible
@@ -629,9 +910,25 @@ export default function WorkspacePage() {
             }}
           >
             <div className="flex h-full flex-col">
+              <div className="border-b border-zinc-800 px-4 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/20 text-sm font-semibold text-emerald-300">
+                    {user.firstName?.[0] ?? "S"}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-semibold text-white">
+                      {workspaceName}
+                    </div>
+                    <div className="truncate text-xs uppercase tracking-[0.18em] text-zinc-500">
+                      {activeTabLabel}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex-1 overflow-y-auto px-3 py-4">
-                <div className="px-3 text-xs uppercase tracking-[0.22em] text-zinc-600">
-                  Workspace
+                <div className="px-3 text-[11px] uppercase tracking-[0.22em] text-zinc-600">
+                  Sections
                 </div>
                 <div className="mt-2 space-y-1">
                   {TABS.map((tab) => {
@@ -642,21 +939,90 @@ export default function WorkspacePage() {
                         onClick={() => setActiveTab(tab.key)}
                         className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-[15px] transition-colors ${
                           isActive
-                            ? "bg-black text-white"
-                            : "text-zinc-400 hover:bg-black hover:text-white"
+                            ? "bg-zinc-900 text-white"
+                            : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
                         }`}
                       >
                         <span>{tab.label}</span>
-                        <span className="text-xs text-zinc-600">›</span>
+                        <span className="text-xs text-zinc-600">{isActive ? "•" : ">"}</span>
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  {sidebarContextGroups.map((group) => (
+                    <div key={group.key}>
+                      <div className="px-3 text-[11px] uppercase tracking-[0.22em] text-zinc-600">
+                        {group.label}
+                      </div>
+                      {group.chips && group.chips.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2 px-3">
+                          {group.chips.map((chip) => (
+                            <span
+                              key={chip.key}
+                              className={`rounded-full border px-2.5 py-1 text-[11px] ${
+                                chip.tone === "accent"
+                                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                                  : "border-zinc-800 bg-black text-zinc-400"
+                              }`}
+                            >
+                              {chip.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 space-y-1">
+                        {group.items.map((item) => {
+                          const itemClasses = item.active
+                            ? "bg-zinc-900 text-white"
+                            : "text-zinc-400 hover:bg-zinc-900 hover:text-white";
+                          if (item.href && !item.disabled) {
+                            return (
+                              <a
+                                key={item.key}
+                                href={item.href}
+                                className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-[15px] transition-colors ${itemClasses}`}
+                              >
+                                <span className="truncate">{item.label}</span>
+                                {item.badge && (
+                                  <span className="ml-3 text-xs text-zinc-500">
+                                    {item.badge}
+                                  </span>
+                                )}
+                              </a>
+                            );
+                          }
+                          return (
+                            <button
+                              key={item.key}
+                              type="button"
+                              disabled={item.disabled}
+                              onClick={() => handleSidebarAction(item.action, item.payload)}
+                              className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-[15px] transition-colors ${
+                                item.disabled
+                                  ? "cursor-not-allowed text-zinc-700"
+                                  : itemClasses
+                              }`}
+                            >
+                              <span className="truncate">{item.label}</span>
+                              {item.badge && (
+                                <span className="ml-3 text-xs text-zinc-500">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <button
                 onMouseDown={(event) => {
-                  if (!sidebarOpen) return;
+                  if (!isSidebarPinned) return;
                   sidebarResizeStartRef.current = {
                     x: event.clientX,
                     width: sidebarWidth,
@@ -664,7 +1030,7 @@ export default function WorkspacePage() {
                   setIsResizingSidebar(true);
                 }}
                 className={`absolute right-0 top-0 h-full w-3 cursor-ew-resize transition-opacity ${
-                  sidebarOpen ? "opacity-100" : "opacity-0"
+                  isSidebarPinned ? "opacity-100" : "opacity-0"
                 }`}
                 aria-label="Resize sidebar"
               >
@@ -678,7 +1044,7 @@ export default function WorkspacePage() {
           <section className="space-y-6">
             {activeTab === "analysis" && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
+                <div ref={overviewRef} className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-semibold text-white">Dashboard</h2>
                   </div>
@@ -691,7 +1057,10 @@ export default function WorkspacePage() {
                 </div>
 
                 {agentRunning && (
-                  <div className="flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-black p-4">
+                  <div
+                    ref={runStatusRef}
+                    className="flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-black p-4"
+                  >
                     {[
                       { key: "behavioral", label: "Amplitude", integration: "amplitude" },
                       { key: "support", label: "Zendesk", integration: "zendesk" },
@@ -722,6 +1091,8 @@ export default function WorkspacePage() {
                 {analysisError && (
                   <div className="mb-3 text-sm text-red-400">{analysisError}</div>
                 )}
+
+                {!agentRunning && <div ref={runStatusRef} />}
 
                 {loadingIntegrations ? (
                   <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">
@@ -768,7 +1139,7 @@ export default function WorkspacePage() {
                     ))}
                   </div>
                 ) : hasSourceAnalysis ? (
-                  <div className="space-y-4">
+                  <div ref={connectedToolsRef} className="space-y-4">
                     {connectedIntegrations
                       .map((key) => {
                         const analysisKey =
@@ -836,7 +1207,10 @@ export default function WorkspacePage() {
                     )}
                   </div>
                 ) : analysisData.brief ? (
-                  <div className="rounded-2xl border border-zinc-800 bg-black p-5">
+                  <div
+                    ref={latestBriefRef}
+                    className="rounded-2xl border border-zinc-800 bg-black p-5"
+                  >
                     <div className="prose prose-invert prose-sm max-w-none text-zinc-200">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {analysisData.brief}
