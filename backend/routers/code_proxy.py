@@ -14,8 +14,9 @@ from urllib.parse import urlencode, urljoin
 
 import httpx
 import websockets
-from fastapi import APIRouter, HTTPException, Request, WebSocket
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from websockets.exceptions import ConnectionClosed
 
 router = APIRouter(prefix="/code", tags=["code-proxy"])
 
@@ -173,12 +174,20 @@ async def proxy_code_ws(websocket: WebSocket, user_id: str, path: str):
             try:
                 while True:
                     message = await websocket.receive()
+                    if message["type"] == "websocket.disconnect":
+                        break
                     if "text" in message:
                         await upstream_ws.send(message["text"])
                     elif "bytes" in message:
                         await upstream_ws.send(message["bytes"])
-            except Exception:
-                await upstream_ws.close()
+            except WebSocketDisconnect:
+                pass
+            except RuntimeError:
+                # Client websocket already closed.
+                pass
+            finally:
+                if not upstream_ws.closed:
+                    await upstream_ws.close()
 
         async def to_client():
             try:
@@ -187,10 +196,24 @@ async def proxy_code_ws(websocket: WebSocket, user_id: str, path: str):
                         await websocket.send_bytes(message)
                     else:
                         await websocket.send_text(message)
-            except Exception:
-                await websocket.close()
+            except ConnectionClosed:
+                pass
+            except RuntimeError:
+                # FastAPI websocket already closed.
+                pass
 
-        await asyncio.gather(to_upstream(), to_client())
+        upstream_task = asyncio.create_task(to_upstream())
+        client_task = asyncio.create_task(to_client())
+        done, pending = await asyncio.wait(
+            {upstream_task, client_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for task in pending:
+            task.cancel()
+
+        await asyncio.gather(*pending, return_exceptions=True)
+        await asyncio.gather(*done, return_exceptions=True)
 
 
 @router.api_route("/login", methods=["GET", "POST"])
