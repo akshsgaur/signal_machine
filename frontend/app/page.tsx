@@ -18,7 +18,7 @@ export default async function Home() {
           <header className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl flex items-center justify-center overflow-hidden">
-                <Image src="/logo.png" alt="Signal logo" width={44} height={44} />
+                <Image src="/logo2.png" alt="Signal logo" width={44} height={44} />
               </div>
               <div>
                 <p className="text-sm uppercase tracking-[0.28em] text-white font-semibold">
