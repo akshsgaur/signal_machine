@@ -1,7 +1,12 @@
+import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+export default async function Home() {
+  const { userId } = await auth();
+  if (userId) redirect("/app");
+
   return (
     <main className="min-h-screen bg-[#0B0B0B] text-white">
       <div className="relative overflow-hidden">
