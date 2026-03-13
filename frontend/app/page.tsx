@@ -17,7 +17,7 @@ export default async function Home() {
         <div className="relative z-10 mx-auto max-w-6xl px-6 py-8">
           <header className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl flex items-center justify-center overflow-hidden">
+              <div className="h-10 w-10 flex items-center justify-center overflow-hidden">
                 <Image src="/logo2.png" alt="Signal logo" width={44} height={44} />
               </div>
               <div>
