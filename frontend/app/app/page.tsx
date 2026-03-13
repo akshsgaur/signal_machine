@@ -59,6 +59,11 @@ type ChatSession = {
   updated_at?: string | null;
 };
 
+const SIDEBAR_MIN_WIDTH = 248;
+const SIDEBAR_MAX_WIDTH = 380;
+const SIDEBAR_DEFAULT_WIDTH = 288;
+const SIDEBAR_HOVER_OPEN_DELAY_MS = 3000;
+
 export default function WorkspacePage() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
@@ -72,7 +77,11 @@ export default function WorkspacePage() {
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [chatLoadingHistory, setChatLoadingHistory] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarPeekOpen, setSidebarPeekOpen] = useState(false);
+  const [sidebarHovering, setSidebarHovering] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [builderFullscreen, setBuilderFullscreen] = useState(false);
   const [codeSessionUrl, setCodeSessionUrl] = useState("");
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -113,12 +122,79 @@ export default function WorkspacePage() {
     },
   ]);
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
+  const autoRunAttemptedRef = useRef(false);
+  const sidebarHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sidebarResizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT_WIDTH });
 
   useEffect(() => {
     if (isLoaded && !user) {
       router.replace("/auth/sign-in?allow=1");
     }
   }, [isLoaded, router, user]);
+
+  useEffect(() => {
+    if (sidebarOpen) {
+      setSidebarPeekOpen(false);
+      if (sidebarHoverTimeoutRef.current) {
+        clearTimeout(sidebarHoverTimeoutRef.current);
+        sidebarHoverTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    if (sidebarHovering) {
+      if (!sidebarHoverTimeoutRef.current) {
+        sidebarHoverTimeoutRef.current = setTimeout(() => {
+          setSidebarPeekOpen(true);
+          sidebarHoverTimeoutRef.current = null;
+        }, SIDEBAR_HOVER_OPEN_DELAY_MS);
+      }
+      return;
+    }
+
+    if (sidebarHoverTimeoutRef.current) {
+      clearTimeout(sidebarHoverTimeoutRef.current);
+      sidebarHoverTimeoutRef.current = null;
+    }
+    setSidebarPeekOpen(false);
+  }, [sidebarHovering, sidebarOpen]);
+
+  useEffect(() => {
+    if (!isResizingSidebar) return;
+
+    function handlePointerMove(event: MouseEvent) {
+      const delta = event.clientX - sidebarResizeStartRef.current.x;
+      const nextWidth = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, sidebarResizeStartRef.current.width + delta)
+      );
+      setSidebarWidth(nextWidth);
+    }
+
+    function handlePointerUp() {
+      setIsResizingSidebar(false);
+    }
+
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizingSidebar]);
+
+  useEffect(() => {
+    return () => {
+      if (sidebarHoverTimeoutRef.current) {
+        clearTimeout(sidebarHoverTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -228,9 +304,46 @@ export default function WorkspacePage() {
     }
   }, [user, agentRunning, refreshAnalysis]);
 
+  const connectedIntegrations = useMemo(
+    () => Object.keys(connected).filter((key) => connected[key]),
+    [connected]
+  );
+
   useEffect(() => {
     refreshAnalysis();
   }, [refreshAnalysis]);
+
+  useEffect(() => {
+    if (!user || loadingIntegrations) return;
+
+    if (connectedIntegrations.length === 0) {
+      autoRunAttemptedRef.current = false;
+      return;
+    }
+
+    const hasExistingAnalysis =
+      !!analysisData && analysisData.status !== "none" && !!analysisData.run_id;
+
+    if (hasExistingAnalysis) {
+      autoRunAttemptedRef.current = true;
+      return;
+    }
+
+    if (analysisLoading || agentRunning || autoRunAttemptedRef.current) {
+      return;
+    }
+
+    autoRunAttemptedRef.current = true;
+    runDeepAgent();
+  }, [
+    user,
+    loadingIntegrations,
+    connectedIntegrations.length,
+    analysisData,
+    analysisLoading,
+    agentRunning,
+    runDeepAgent,
+  ]);
 
 
   const refreshInsights = useCallback(async () => {
@@ -279,11 +392,6 @@ export default function WorkspacePage() {
       folderUploadRef.current.setAttribute("directory", "true");
     }
   }, []);
-
-  const connectedIntegrations = useMemo(
-    () => Object.keys(connected).filter((key) => connected[key]),
-    [connected]
-  );
 
   if (!isLoaded) {
     return (
@@ -412,6 +520,13 @@ export default function WorkspacePage() {
     handleCreateFolder(name);
   }
 
+  const isSidebarVisible = sidebarOpen || sidebarPeekOpen;
+  const pinnedSidebarOffset = sidebarOpen ? sidebarWidth + 24 : 0;
+  const userBadge =
+    user?.firstName?.[0]?.toUpperCase() ??
+    user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
+    "S";
+
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-white">
       {(!isLoaded || !user) && (
@@ -426,11 +541,14 @@ export default function WorkspacePage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setSidebarOpen(true)}
+              onClick={() => {
+                setSidebarOpen((current) => !current);
+                setSidebarPeekOpen(false);
+              }}
               className="h-9 w-9 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-300 hover:text-white"
-              aria-label="Open menu"
+              aria-label={sidebarOpen ? "Close menu" : "Open menu"}
             >
-              ≡
+              {sidebarOpen ? "←" : "≡"}
             </button>
             <div>
               <h1 className="text-2xl font-bold">Signal Workspace</h1>
@@ -458,57 +576,167 @@ export default function WorkspacePage() {
           </div>
         </div>
 
-        <div className="flex items-start gap-6 relative">
-
+        <div className="relative min-h-[calc(100vh-120px)]">
+          <div
+            className="fixed left-0 top-[92px] bottom-6 z-20 w-5"
+            onMouseEnter={() => setSidebarHovering(true)}
+            onMouseLeave={() => setSidebarHovering(false)}
+          />
           <aside
-            className={`sticky top-6 h-[calc(100vh-48px)] w-[260px] bg-[#0D0F10] border border-zinc-900 rounded-2xl p-4 space-y-4 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)] transition-transform duration-300 ease-out ${
-              sidebarOpen ? "translate-x-0" : "-translate-x-[280px]"
-            }`}
+            onMouseEnter={() => setSidebarHovering(true)}
+            onMouseLeave={() => setSidebarHovering(false)}
+            className="fixed left-4 top-[92px] bottom-6 z-30 overflow-hidden rounded-[28px] border border-zinc-800/80 bg-[#050607]/95 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-transform duration-300 ease-out"
+            style={{
+              width: sidebarWidth,
+              transform: isSidebarVisible
+                ? "translateX(0)"
+                : "translateX(calc(-100% - 24px))",
+            }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-                Menu
-              </span>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="text-xs text-zinc-400 hover:text-white"
-              >
-                Close
-              </button>
-            </div>
-            <div className="space-y-2">
-              {TABS.map((tab) => {
-                const isActive = tab.key === activeTab;
-                return (
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#1992ff] text-base font-semibold text-white">
+                    {userBadge}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-lg font-semibold text-white">
+                      {user?.firstName || "Signal"}
+                    </div>
+                    <div className="truncate text-xs text-zinc-500">
+                      Product workspace
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
-                    key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-zinc-800 text-white"
-                        : "text-zinc-300 hover:text-white hover:bg-zinc-800/60"
-                    }`}
+                    onClick={() => setSidebarOpen((current) => !current)}
+                    className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/80 text-sm text-zinc-300 transition-colors hover:text-white"
+                    aria-label={sidebarOpen ? "Collapse sidebar" : "Pin sidebar"}
                   >
-                    {tab.label}
+                    {sidebarOpen ? "←" : "→"}
                   </button>
-                );
-              })}
-            </div>
-            <div className="pt-2 border-t border-zinc-800">
-              <Link
-                href="/connect"
-                className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors flex items-center justify-between"
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-3 py-4">
+                <div className="space-y-1">
+                  {[
+                    { key: "overview", label: "Overview", action: () => setActiveTab("analysis") },
+                    { key: "chat", label: "Inbox Chat", action: () => setActiveTab("chat") },
+                    { key: "issues", label: "Customer Insights", action: () => setActiveTab("insights") },
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={item.action}
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-white"
+                    >
+                      <span className="text-zinc-600">◦</span>
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-6 px-3 text-xs uppercase tracking-[0.22em] text-zinc-600">
+                  Workspace
+                </div>
+                <div className="mt-2 space-y-1">
+                  {TABS.map((tab) => {
+                    const isActive = tab.key === activeTab;
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-[15px] transition-colors ${
+                          isActive
+                            ? "bg-zinc-900 text-white"
+                            : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span className="text-xs text-zinc-600">›</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-6 px-3 text-xs uppercase tracking-[0.22em] text-zinc-600">
+                  Your stack
+                </div>
+                <div className="mt-2 rounded-3xl border border-zinc-800 bg-zinc-950/80 p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-white">Integrations</div>
+                      <div className="mt-1 text-xs text-zinc-500">
+                        {connectedIntegrations.length} connected source
+                        {connectedIntegrations.length === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <div className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-300">
+                      Live
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {connectedIntegrations.length > 0 ? (
+                      connectedIntegrations.map((integration) => (
+                        <div
+                          key={integration}
+                          className="flex items-center justify-between rounded-2xl bg-zinc-900/70 px-3 py-2 text-sm text-zinc-300"
+                        >
+                          <span>{INTEGRATION_LABELS[integration] ?? integration}</span>
+                          <span className="text-xs text-emerald-400">Connected</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl bg-zinc-900/70 px-3 py-3 text-sm text-zinc-500">
+                        No integrations connected yet.
+                      </div>
+                    )}
+                  </div>
+                  <Link
+                    href="/connect"
+                    className="mt-3 flex items-center justify-between rounded-2xl border border-zinc-800 px-3 py-3 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+                  >
+                    <span>Manage integrations</span>
+                    <span className="text-zinc-600">→</span>
+                  </Link>
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-800/80 p-3">
+                <div className="rounded-[24px] border border-zinc-800 bg-zinc-950/80 p-4">
+                  <div className="text-sm text-zinc-500">What&apos;s new</div>
+                  <div className="mt-2 text-lg font-medium text-white">Workspace refresh</div>
+                  <div className="mt-1 text-sm text-zinc-500">
+                    Hover the left edge to preview the menu when it is collapsed.
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onMouseDown={(event) => {
+                  if (!sidebarOpen) return;
+                  sidebarResizeStartRef.current = {
+                    x: event.clientX,
+                    width: sidebarWidth,
+                  };
+                  setIsResizingSidebar(true);
+                }}
+                className={`absolute right-0 top-0 h-full w-3 cursor-ew-resize transition-opacity ${
+                  sidebarOpen ? "opacity-100" : "opacity-0"
+                }`}
+                aria-label="Resize sidebar"
               >
-                <span>Manage Integrations</span>
-                <span className="text-zinc-500">→</span>
-              </Link>
+                <span className="absolute inset-y-0 right-1 flex items-center">
+                  <span className="h-12 w-[3px] rounded-full bg-zinc-700/80" />
+                </span>
+              </button>
             </div>
           </aside>
 
           <section
-            className={`space-y-6 flex-1 transition-all duration-300 ease-out ${
-              sidebarOpen ? "ml-0" : "-ml-[260px]"
-            }`}
+            className="space-y-6 transition-[padding] duration-300 ease-out"
+            style={{ paddingLeft: pinnedSidebarOffset }}
           >
             {activeTab === "analysis" && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
@@ -525,18 +753,6 @@ export default function WorkspacePage() {
                       className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
                     >
                       Refresh
-                    </button>
-                    <button
-                      onClick={runDeepAgent}
-                      disabled={agentRunning}
-                      className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {agentRunning ? (
-                        <>
-                          <span className="h-2 w-2 rounded-full bg-black animate-pulse" />
-                          Running…
-                        </>
-                      ) : "Run Deep Agent"}
                     </button>
                   </div>
                 </div>
@@ -574,15 +790,33 @@ export default function WorkspacePage() {
                   <div className="mb-3 text-sm text-red-400">{analysisError}</div>
                 )}
 
-                {loadingIntegrations || analysisLoading ? (
+                {loadingIntegrations ? (
                   <div className="text-sm text-zinc-400">Loading integrations...</div>
                 ) : connectedIntegrations.length === 0 ? (
+                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
+                    <h3 className="text-sm font-semibold text-white">
+                      Add integrations to unlock analysis
+                    </h3>
+                    <p className="mt-2 text-sm text-zinc-400">
+                      Connect at least one source like Amplitude, Zendesk, Productboard, or
+                      Linear and Signal will generate your analysis automatically.
+                    </p>
+                    <div className="mt-4">
+                      <Link
+                        href="/connect"
+                        className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:bg-emerald-400 transition-colors"
+                      >
+                        Connect integrations
+                      </Link>
+                    </div>
+                  </div>
+                ) : analysisLoading || agentRunning ? (
                   <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-400">
-                    No integrations connected yet. Connect at least one to see deep analysis.
+                    Generating analysis from your connected integrations...
                   </div>
                 ) : !analysisData || analysisData.status === "none" ? (
                   <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-400">
-                    No analysis available yet. Start a new run to generate deep analysis.
+                    Analysis is not ready yet. Refresh in a moment if this does not update automatically.
                   </div>
                 ) : (
                   <div className="space-y-4">
