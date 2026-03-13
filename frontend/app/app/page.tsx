@@ -90,7 +90,6 @@ type SidebarContextGroup = {
   key: string;
   label: string;
   items: SidebarContextItem[];
-  chips?: Array<{ key: string; label: string; tone?: "default" | "accent" }>;
 };
 
 const SIDEBAR_MIN_WIDTH = 248;
@@ -651,49 +650,10 @@ export default function WorkspacePage() {
   const isSidebarVisible = isSidebarPinned || isSidebarPeeking;
   const contentInset = isSidebarPinned ? sidebarWidth + 16 : 0;
   const workspaceName = user?.firstName ? `${user.firstName}'s Workspace` : "Workspace";
-  const activeTabLabel = TABS.find((tab) => tab.key === activeTab)?.label ?? "Workspace";
 
   const sidebarContextGroups = useMemo<SidebarContextGroup[]>(() => {
     if (activeTab === "analysis") {
-      return [
-        {
-          key: "dashboard",
-          label: "Dashboard",
-          items: [
-            { key: "overview", label: "Overview", action: "scroll-overview", active: true },
-            {
-              key: "connected-tools",
-              label: "Connected tools",
-              action: "scroll-connected-tools",
-              badge: `${connectedIntegrations.length}`,
-            },
-            {
-              key: "latest-brief",
-              label: "Latest brief",
-              action: "scroll-latest-brief",
-              disabled: !analysisData?.brief && !hasSourceAnalysis,
-            },
-            {
-              key: "run-status",
-              label: "Run status",
-              action: "scroll-run-status",
-              badge: agentRunning ? "Running" : analysisData?.status ?? "Idle",
-            },
-          ],
-          chips: [
-            {
-              key: "integrations",
-              label: `${connectedIntegrations.length} connected`,
-              tone: connectedIntegrations.length > 0 ? "accent" : "default",
-            },
-            {
-              key: "analysis-status",
-              label: agentRunning ? "Analysis running" : analysisData?.status ?? "No run",
-              tone: agentRunning || analysisData?.status === "complete" ? "accent" : "default",
-            },
-          ],
-        },
-      ];
+      return [];
     }
 
     if (activeTab === "chat") {
@@ -802,15 +762,11 @@ export default function WorkspacePage() {
   }, [
     activeFolder,
     activeTab,
-    agentRunning,
-    analysisData,
     chatSessionId,
     chatSessions,
     codeSessionError,
     codeSessionLoading,
     codeSessionUrl,
-    connectedIntegrations,
-    hasSourceAnalysis,
     insightsFolders,
   ]);
 
@@ -911,18 +867,8 @@ export default function WorkspacePage() {
           >
             <div className="flex h-full flex-col">
               <div className="border-b border-zinc-800 px-4 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/20 text-sm font-semibold text-emerald-300">
-                    {user.firstName?.[0] ?? "S"}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-semibold text-white">
-                      {workspaceName}
-                    </div>
-                    <div className="truncate text-xs uppercase tracking-[0.18em] text-zinc-500">
-                      {activeTabLabel}
-                    </div>
-                  </div>
+                <div className="truncate text-base font-semibold text-white">
+                  {workspaceName}
                 </div>
               </div>
 
@@ -956,22 +902,6 @@ export default function WorkspacePage() {
                       <div className="px-3 text-[11px] uppercase tracking-[0.22em] text-zinc-600">
                         {group.label}
                       </div>
-                      {group.chips && group.chips.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2 px-3">
-                          {group.chips.map((chip) => (
-                            <span
-                              key={chip.key}
-                              className={`rounded-full border px-2.5 py-1 text-[11px] ${
-                                chip.tone === "accent"
-                                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                                  : "border-zinc-800 bg-black text-zinc-400"
-                              }`}
-                            >
-                              {chip.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                       <div className="mt-2 space-y-1">
                         {group.items.map((item) => {
                           const itemClasses = item.active
