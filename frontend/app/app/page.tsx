@@ -524,7 +524,7 @@ export default function WorkspacePage() {
   }
 
   const isSidebarVisible = sidebarOpen || sidebarPeekOpen;
-  const contentInset = SIDEBAR_DEFAULT_WIDTH + 48;
+  const contentInset = SIDEBAR_DEFAULT_WIDTH + 12;
   const userBadge =
     user?.firstName?.[0]?.toUpperCase() ??
     user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
