@@ -86,6 +86,8 @@ export default function WorkspacePage() {
   const [sidebarHydrated, setSidebarHydrated] = useState(false);
   const [builderFullscreen, setBuilderFullscreen] = useState(false);
   const [codeSessionUrl, setCodeSessionUrl] = useState("");
+  const [codeSessionLoading, setCodeSessionLoading] = useState(true);
+  const [builderIframeLoaded, setBuilderIframeLoaded] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [agentRunning, setAgentRunning] = useState(false);
@@ -223,10 +225,16 @@ export default function WorkspacePage() {
     async function loadCodeSession() {
       try {
         if (!user?.id) return;
+        setCodeSessionLoading(true);
         const data = await getCodeSessionUrl(user.id);
-        if (mounted) setCodeSessionUrl(data.url);
+        if (mounted) {
+          setCodeSessionUrl(data.url);
+          setBuilderIframeLoaded(false);
+        }
       } catch (err) {
         console.error("Failed to fetch code session URL", err);
+      } finally {
+        if (mounted) setCodeSessionLoading(false);
       }
     }
     if (isLoaded && user?.id) loadCodeSession();
@@ -1132,14 +1140,44 @@ export default function WorkspacePage() {
                 </div>
 
                 {codeSessionUrl ? (
-                  <div className="rounded-2xl border border-zinc-800 bg-black/40 overflow-hidden w-full">
+                  <div className="relative rounded-2xl border border-zinc-800 bg-black/40 overflow-hidden w-full">
+                    {!builderIframeLoaded && (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
+                        <div className="flex flex-col items-center gap-4 text-center">
+                          <div className="text-5xl animate-pulse">{"\u2699\ufe0f"}</div>
+                          <div>
+                            <div className="text-lg font-medium text-white">
+                              Booting your IDE
+                            </div>
+                            <div className="mt-1 text-sm text-zinc-400">
+                              The coding workspace is starting up.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <iframe
                       src={codeSessionUrl}
                       className="w-full h-[calc(100vh-220px)]"
                       allow="clipboard-read; clipboard-write"
                       sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-popups allow-downloads"
                       title="VS Code Web Workbench"
+                      onLoad={() => setBuilderIframeLoaded(true)}
                     />
+                  </div>
+                ) : codeSessionLoading ? (
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-10">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                      <div className="text-5xl animate-pulse">{"\u2699\ufe0f"}</div>
+                      <div>
+                        <div className="text-lg font-medium text-white">
+                          Booting your IDE
+                        </div>
+                        <div className="mt-1 text-sm text-zinc-400">
+                          Connecting to the code workspace.
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-sm text-zinc-400">
@@ -1160,13 +1198,31 @@ export default function WorkspacePage() {
                           Close
                         </button>
                       </div>
-                      <iframe
-                        src={codeSessionUrl}
-                        className="w-full h-[calc(100%-40px)]"
-                        allow="clipboard-read; clipboard-write"
-                        sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-popups allow-downloads"
-                        title="VS Code Web Workbench Fullscreen"
-                      />
+                      <div className="relative h-[calc(100%-40px)]">
+                        {!builderIframeLoaded && (
+                          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
+                            <div className="flex flex-col items-center gap-4 text-center">
+                              <div className="text-5xl animate-pulse">{"\u2699\ufe0f"}</div>
+                              <div>
+                                <div className="text-lg font-medium text-white">
+                                  Booting your IDE
+                                </div>
+                                <div className="mt-1 text-sm text-zinc-400">
+                                  The coding workspace is starting up.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <iframe
+                          src={codeSessionUrl}
+                          className="w-full h-full"
+                          allow="clipboard-read; clipboard-write"
+                          sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-popups allow-downloads"
+                          title="VS Code Web Workbench Fullscreen"
+                          onLoad={() => setBuilderIframeLoaded(true)}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
