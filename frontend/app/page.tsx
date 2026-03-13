@@ -24,7 +24,6 @@ export default async function Home() {
                 <p className="text-sm uppercase tracking-[0.28em] text-white font-semibold">
                   Signal
                 </p>
-                <p className="text-xs text-zinc-400">PM Intelligence Platform</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -49,22 +48,10 @@ export default async function Home() {
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
-                href="/app"
-                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black hover:bg-emerald-400 transition-colors"
-              >
-                Open workspace
-              </Link>
-              <Link
                 href="/auth/sign-up?allow=1"
                 className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black hover:bg-emerald-400 transition-colors"
               >
                 Start free
-              </Link>
-              <Link
-                href="/connect"
-                className="rounded-full border border-zinc-700 px-6 py-3 text-sm font-semibold text-zinc-200 hover:border-zinc-500 transition-colors"
-              >
-                Connect data
               </Link>
             </div>
           </section>
