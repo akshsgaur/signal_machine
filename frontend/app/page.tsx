@@ -21,7 +21,7 @@ export default async function Home() {
                 <Image src="/logo2.png" alt="Signal logo" width={44} height={44} />
               </div>
               <div>
-                <p className="text-sm uppercase tracking-[0.28em] text-white font-semibold">
+                <p className="text-sm uppercase tracking-[0.28em] text-white font-normal">
                   Signal
                 </p>
               </div>
@@ -29,7 +29,7 @@ export default async function Home() {
             <div className="flex items-center gap-3">
               <Link
                 href="/auth/sign-in?allow=1"
-                className="rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-200 hover:border-zinc-500 transition-colors"
+                className="rounded-full border border-zinc-700 px-4 py-2 text-xs font-normal text-white hover:border-zinc-500 transition-colors"
               >
                 Sign in
               </Link>
@@ -40,7 +40,7 @@ export default async function Home() {
             <h1 className="text-5xl md:text-7xl font-normal tracking-[-0.05em] leading-[0.95]">
               The Platform for Next-Gen Product Managers
             </h1>
-            <p className="mt-8 text-sm md:text-base text-zinc-400">
+            <p className="mx-auto mt-8 max-w-3xl text-xl font-normal tracking-[-0.03em] leading-snug text-white md:text-2xl">
               Turn support, analytics, delivery, and customer interviews into
               product decisions and prototypes.
             </p>
@@ -48,7 +48,7 @@ export default async function Home() {
             <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
                 href="/auth/sign-up?allow=1"
-                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black hover:bg-emerald-400 transition-colors"
+                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-normal text-black hover:bg-emerald-400 transition-colors"
               >
                 Try Signal
               </Link>
@@ -74,8 +74,12 @@ export default async function Home() {
                 key={item.title}
                 className="rounded-2xl border border-zinc-900 bg-zinc-950/70 p-5 text-left"
               >
-                <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                <p className="mt-2 text-xs text-zinc-400">{item.body}</p>
+                <h3 className="text-lg font-normal tracking-[-0.03em] text-white">
+                  {item.title}
+                </h3>
+                <p className="mt-3 text-sm font-normal tracking-[-0.02em] leading-6 text-white">
+                  {item.body}
+                </p>
               </div>
             ))}
           </section>
