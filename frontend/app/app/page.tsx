@@ -625,28 +625,17 @@ export default function WorkspacePage() {
           >
             <div className="flex h-full flex-col">
               <div className="border-b border-zinc-800 px-4 py-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-base font-semibold text-black">
-                      {userBadge}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-lg font-semibold text-white">
-                        StarSignals
-                      </div>
-                      <div className="truncate text-xs text-zinc-500">
-                        PM operating system
-                      </div>
-                    </div>
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-base font-semibold text-black">
+                    {userBadge}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSidebarOpen((current) => !current)}
-                      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800 bg-black text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
-                      aria-label={sidebarOpen ? "Collapse sidebar" : "Pin sidebar"}
-                    >
-                      {sidebarOpen ? "←" : "→"}
-                    </button>
+                  <div className="min-w-0">
+                    <div className="truncate text-lg font-semibold text-white">
+                      StarSignals
+                    </div>
+                    <div className="truncate text-xs text-zinc-500">
+                      PM operating system
+                    </div>
                   </div>
                 </div>
               </div>
