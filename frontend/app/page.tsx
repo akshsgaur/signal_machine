@@ -29,12 +29,6 @@ export default async function Home() {
             </div>
             <div className="flex items-center gap-3">
               <Link
-                href="/app"
-                className="rounded-full border border-emerald-500/50 px-4 py-2 text-xs font-semibold text-emerald-200 hover:border-emerald-400 hover:text-white transition-colors"
-              >
-                Dashboard
-              </Link>
-              <Link
                 href="/auth/sign-in?allow=1"
                 className="rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-200 hover:border-zinc-500 transition-colors"
               >
