@@ -8,8 +8,8 @@ export default async function Home() {
   if (userId) redirect("/app");
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
-      <div className="relative overflow-hidden">
+    <main className="min-h-screen bg-black text-white">
+      <div className="relative min-h-screen overflow-hidden bg-black">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.22),transparent_55%)]" />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,9,9,0.9),rgba(4,4,4,1))]" />
         <div className="absolute inset-0 opacity-30 bg-[radial-gradient(rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:18px_18px]" />
