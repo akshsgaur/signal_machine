@@ -38,12 +38,11 @@ export default async function Home() {
 
           <section className="mx-auto mt-20 max-w-4xl text-center">
             <h1 className="text-5xl md:text-7xl font-normal tracking-[-0.05em] leading-[0.95]">
-              A Platform For The Next Generation Product Manager
+              The Platform for Next-Gen Product Managers
             </h1>
             <p className="mt-4 text-sm md:text-base text-zinc-400">
-              Build on live product signals across support, analytics, delivery, and
-              customer interviews. Launch insights, decisions, and prototypes in one
-              place.
+              Turn support, analytics, delivery, and customer interviews into
+              product decisions and prototypes.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -51,7 +50,7 @@ export default async function Home() {
                 href="/auth/sign-up?allow=1"
                 className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black hover:bg-emerald-400 transition-colors"
               >
-                Start free
+                Try Signal
               </Link>
             </div>
           </section>
