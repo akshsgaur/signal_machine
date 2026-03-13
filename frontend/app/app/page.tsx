@@ -534,7 +534,7 @@ export default function WorkspacePage() {
     analysisSourceCount > 0;
 
   return (
-    <main className="min-h-screen bg-[#050816] text-white">
+    <main className="min-h-screen bg-black text-white">
       {(!isLoaded || !user) && (
         <div className="min-h-screen flex items-center justify-center px-6 text-center">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6 text-sm text-zinc-300">
@@ -543,7 +543,7 @@ export default function WorkspacePage() {
         </div>
       )}
       {isLoaded && user && (
-      <div className="w-full px-4 py-5">
+      <div className="w-full bg-black px-4 py-5">
         <div className="mb-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
@@ -551,7 +551,7 @@ export default function WorkspacePage() {
                 setSidebarOpen((current) => !current);
                 setSidebarPeekOpen(false);
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700 hover:text-white"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-black text-zinc-300 hover:border-zinc-700 hover:text-white"
               aria-label={sidebarOpen ? "Close menu" : "Open menu"}
             >
               {sidebarOpen ? "←" : "≡"}
@@ -571,7 +571,7 @@ export default function WorkspacePage() {
           <div className="flex items-center gap-3">
             <Link
               href="/connect"
-              className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+              className="rounded-xl border border-zinc-800 bg-black px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
             >
               Manage integrations
             </Link>
@@ -596,7 +596,7 @@ export default function WorkspacePage() {
           <aside
             onMouseEnter={() => setSidebarHovering(true)}
             onMouseLeave={() => setSidebarHovering(false)}
-            className="fixed left-4 top-[92px] bottom-6 z-30 overflow-hidden rounded-[24px] border border-zinc-800 bg-[#0c0d10] shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out"
+            className="fixed left-4 top-[92px] bottom-6 z-30 overflow-hidden rounded-[24px] border border-zinc-800 bg-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out"
             style={{
               width: sidebarWidth,
               transform: isSidebarVisible
@@ -623,26 +623,11 @@ export default function WorkspacePage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSidebarOpen((current) => !current)}
-                      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+                      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800 bg-black text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
                       aria-label={sidebarOpen ? "Collapse sidebar" : "Pin sidebar"}
                     >
                       {sidebarOpen ? "←" : "→"}
                     </button>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-                  <div className="text-[11px] uppercase tracking-[0.24em] text-zinc-500">
-                    Workspace status
-                  </div>
-                  <div className="mt-2 text-sm font-medium text-white">
-                    {analysisReady
-                      ? "Signals are flowing across your connected stack."
-                      : "Connect your stack and Signal will shape the first brief automatically."}
-                  </div>
-                  <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
-                    <span className="h-2 w-2 rounded-full bg-zinc-400" />
-                    {connectedIntegrations.length} active integration
-                    {connectedIntegrations.length === 1 ? "" : "s"}
                   </div>
                 </div>
               </div>
@@ -660,8 +645,8 @@ export default function WorkspacePage() {
                         onClick={() => setActiveTab(tab.key)}
                         className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-[15px] transition-colors ${
                           isActive
-                            ? "bg-zinc-950 text-white"
-                            : "text-zinc-400 hover:bg-zinc-950 hover:text-white"
+                            ? "bg-black text-white"
+                            : "text-zinc-400 hover:bg-black hover:text-white"
                         }`}
                       >
                         <span>{tab.label}</span>
@@ -669,58 +654,6 @@ export default function WorkspacePage() {
                       </button>
                     );
                   })}
-                </div>
-
-                <div className="mt-6 px-3 text-xs uppercase tracking-[0.22em] text-zinc-600">
-                  Connected stack
-                </div>
-                <div className="mt-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium text-white">Integrations</div>
-                      <div className="mt-1 text-xs text-zinc-500">
-                        {connectedIntegrations.length} connected source
-                        {connectedIntegrations.length === 1 ? "" : "s"}
-                      </div>
-                    </div>
-                    <div className="rounded-full bg-zinc-800 px-2 py-1 text-xs font-medium text-zinc-300">
-                      Synced
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {connectedIntegrations.length > 0 ? (
-                      connectedIntegrations.map((integration) => (
-                        <div
-                          key={integration}
-                          className="flex items-center justify-between rounded-xl border border-zinc-800 bg-[#0b0c0f] px-3 py-2 text-sm text-zinc-300"
-                        >
-                          <span>{INTEGRATION_LABELS[integration] ?? integration}</span>
-                          <span className="text-xs text-emerald-400">Connected</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-xl border border-zinc-800 bg-[#0b0c0f] px-3 py-3 text-sm text-zinc-500">
-                        No integrations connected yet.
-                      </div>
-                    )}
-                  </div>
-                  <Link
-                    href="/connect"
-                    className="mt-3 flex items-center justify-between rounded-xl border border-zinc-800 px-3 py-3 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:bg-[#0b0c0f] hover:text-white"
-                  >
-                    <span>Manage integrations</span>
-                    <span className="text-zinc-600">→</span>
-                  </Link>
-                </div>
-              </div>
-
-              <div className="border-t border-zinc-800 p-3">
-                <div className="rounded-[20px] border border-zinc-800 bg-zinc-950 p-4">
-                  <div className="text-sm text-zinc-500">What&apos;s new</div>
-                  <div className="mt-2 text-base font-medium text-white">Dashboard refresh</div>
-                  <div className="mt-1 text-sm text-zinc-500">
-                    Minimal shell, persistent analysis, and faster workspace navigation.
-                  </div>
                 </div>
               </div>
 
@@ -760,26 +693,26 @@ export default function WorkspacePage() {
                   </div>
                   <button
                     onClick={refreshAnalysis}
-                    className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+                    className="rounded-xl border border-zinc-800 bg-black px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
                   >
                     Refresh
                   </button>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-4">
                     <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Sources</div>
                     <div className="mt-2 text-2xl font-semibold text-white">
                       {connectedIntegrations.length}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-4">
                     <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Status</div>
                     <div className="mt-2 text-2xl font-semibold text-white">
                       {analysisReady ? "Ready" : connectedIntegrations.length === 0 ? "Setup" : "Running"}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-4">
                     <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Coverage</div>
                     <div className="mt-2 text-2xl font-semibold text-white">
                       {analysisSourceCount}
@@ -788,7 +721,7 @@ export default function WorkspacePage() {
                 </div>
 
                 {agentRunning && (
-                  <div className="flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-black p-4">
                     {[
                       { key: "behavioral", label: "Amplitude", integration: "amplitude" },
                       { key: "support", label: "Zendesk", integration: "zendesk" },
@@ -821,11 +754,11 @@ export default function WorkspacePage() {
                 )}
 
                 {loadingIntegrations ? (
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-sm text-zinc-400">
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">
                     Loading integrations...
                   </div>
                 ) : connectedIntegrations.length === 0 ? (
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-6">
                     <h3 className="text-base font-semibold text-white">
                       Add integrations to unlock analysis
                     </h3>
@@ -843,12 +776,26 @@ export default function WorkspacePage() {
                     </div>
                   </div>
                 ) : analysisLoading || agentRunning ? (
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-sm text-zinc-400">
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">
                     Generating analysis from your connected integrations...
                   </div>
                 ) : !analysisData || analysisData.status === "none" ? (
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-sm text-zinc-400">
-                    Analysis is not ready yet. Refresh in a moment if this does not update automatically.
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-2">
+                    {[
+                      "Connect your tools",
+                      "Set up your teams",
+                      "Import your data",
+                      "Get familiar with Linear",
+                    ].map((item, index) => (
+                      <div
+                        key={item}
+                        className={`px-6 py-7 text-[22px] font-medium text-white ${
+                          index === 3 ? "bg-zinc-950" : ""
+                        } ${index > 0 ? "border-t border-zinc-900" : ""}`}
+                      >
+                        {item}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -869,7 +816,7 @@ export default function WorkspacePage() {
                         return (
                           <div
                             key={key}
-                            className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
+                            className="rounded-2xl border border-zinc-800 bg-black p-5"
                           >
                             <div className="flex items-center justify-between">
                               <div>
@@ -885,7 +832,7 @@ export default function WorkspacePage() {
                                 Connected
                               </div>
                             </div>
-                            <div className="mt-4 rounded-xl border border-zinc-800 bg-[#0b0c0f] p-4 text-sm text-zinc-200">
+                            <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-4 text-sm text-zinc-200">
                               <div className="prose prose-invert prose-sm max-w-none">
                                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                   {content}
@@ -898,7 +845,7 @@ export default function WorkspacePage() {
                       .filter(Boolean)}
 
                     {analysisData?.sources?.["insights"] && (
-                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+                      <div className="rounded-2xl border border-zinc-800 bg-black p-5">
                         <div className="flex items-center justify-between">
                           <div>
                             <h3 className="text-white font-semibold">Customer Insights</h3>
@@ -908,7 +855,7 @@ export default function WorkspacePage() {
                           </div>
                           <div className="text-xs text-emerald-400 font-medium">Morphik</div>
                         </div>
-                        <div className="mt-4 rounded-xl border border-zinc-800 bg-[#0b0c0f] p-4 text-sm text-zinc-200">
+                        <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-4 text-sm text-zinc-200">
                           <div className="prose prose-invert prose-sm max-w-none">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {analysisData.sources["insights"]}
