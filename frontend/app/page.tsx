@@ -22,13 +22,6 @@ export default function Home() {
                 <p className="text-xs text-zinc-400">PM Intelligence Platform</p>
               </div>
             </div>
-            <nav className="hidden md:flex items-center gap-8 text-sm text-zinc-400">
-              <span className="hover:text-white transition-colors">Product</span>
-              <span className="hover:text-white transition-colors">Developers</span>
-              <span className="hover:text-white transition-colors">Solutions</span>
-              <span className="hover:text-white transition-colors">Pricing</span>
-              <span className="hover:text-white transition-colors">Docs</span>
-            </nav>
             <div className="flex items-center gap-3">
               <Link
                 href="/app"
@@ -100,52 +93,6 @@ export default function Home() {
                 <p className="mt-2 text-xs text-zinc-400">{item.body}</p>
               </div>
             ))}
-          </section>
-
-          <section className="mt-16 rounded-3xl border border-zinc-900 bg-gradient-to-br from-zinc-950 via-zinc-950 to-emerald-500/10 p-8">
-            <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6 items-center">
-              <div>
-                <p className="text-xs uppercase tracking-[0.4em] text-emerald-400">
-                  Unified intelligence
-                </p>
-                <h2 className="mt-3 text-2xl font-semibold">
-                  Make product calls with evidence, not gut feel.
-                </h2>
-                <p className="mt-3 text-sm text-zinc-400">
-                  Signal fuses Linear, Zendesk, Amplitude, Productboard, Slack, and
-                  customer interviews into decision-ready briefs.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
-                <div className="text-xs text-zinc-400">Latest signal</div>
-                <div className="mt-2 text-sm text-white">
-                  ⚡ Reliability issues in tool chain are blocking new integrations.
-                </div>
-                <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  Updated just now
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="mt-16 pb-16">
-            <div className="mx-auto max-w-3xl rounded-3xl border border-zinc-900 bg-zinc-950/70 p-6 text-center">
-              <div className="text-sm font-semibold text-white">
-                Ready to launch your workspace?
-              </div>
-              <p className="mt-2 text-xs text-zinc-400">
-                Sign in to connect your product signals and start analyzing.
-              </p>
-              <div className="mt-4">
-                <Link
-                  href="/auth/sign-in?allow=1"
-                  className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2 text-xs font-semibold text-black hover:bg-emerald-400 transition-colors"
-                >
-                  Sign in to continue
-                </Link>
-              </div>
-            </div>
           </section>
         </div>
       </div>
