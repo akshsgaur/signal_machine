@@ -40,7 +40,7 @@ export default async function Home() {
             <h1 className="text-5xl md:text-7xl font-normal tracking-[-0.05em] leading-[0.95]">
               The Platform for Next-Gen Product Managers
             </h1>
-            <p className="mx-auto mt-8 max-w-3xl text-xl font-normal tracking-[-0.03em] leading-snug text-white md:text-2xl">
+            <p className="mx-auto mt-8 max-w-3xl text-lg font-normal tracking-[-0.03em] leading-snug text-white md:text-xl">
               Turn support, analytics, delivery, and customer interviews into
               product decisions and prototypes.
             </p>
