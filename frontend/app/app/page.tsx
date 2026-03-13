@@ -87,6 +87,7 @@ export default function WorkspacePage() {
   const [builderFullscreen, setBuilderFullscreen] = useState(false);
   const [codeSessionUrl, setCodeSessionUrl] = useState("");
   const [codeSessionLoading, setCodeSessionLoading] = useState(true);
+  const [codeSessionError, setCodeSessionError] = useState("");
   const [builderIframeLoaded, setBuilderIframeLoaded] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
@@ -226,6 +227,7 @@ export default function WorkspacePage() {
       try {
         if (!user?.id) return;
         setCodeSessionLoading(true);
+        setCodeSessionError("");
         const data = await getCodeSessionUrl(user.id);
         if (mounted) {
           setCodeSessionUrl(data.url);
@@ -233,6 +235,12 @@ export default function WorkspacePage() {
         }
       } catch (err) {
         console.error("Failed to fetch code session URL", err);
+        if (mounted) {
+          setCodeSessionUrl("");
+          setCodeSessionError(
+            err instanceof Error ? err.message : "Failed to boot the coding workspace."
+          );
+        }
       } finally {
         if (mounted) setCodeSessionLoading(false);
       }
@@ -318,6 +326,10 @@ export default function WorkspacePage() {
   const connectedIntegrations = useMemo(
     () => Object.keys(connected).filter((key) => connected[key]),
     [connected]
+  );
+  const hasSourceAnalysis = useMemo(
+    () => !!analysisData && Object.keys(analysisData.sources ?? {}).length > 0,
+    [analysisData]
   );
 
   useEffect(() => {
@@ -711,6 +723,34 @@ export default function WorkspacePage() {
                   <div className="mb-3 text-sm text-red-400">{analysisError}</div>
                 )}
 
+                <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-black px-5 py-4">
+                  <div>
+                    <div className="text-sm font-medium text-white">
+                      Coding workspace
+                    </div>
+                    <div className="mt-1 text-sm text-zinc-400">
+                      {codeSessionLoading
+                        ? "Booting your IDE..."
+                        : codeSessionError
+                          ? codeSessionError
+                          : codeSessionUrl
+                            ? "IDE ready to open."
+                            : "Code workspace not available yet."}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("builder")}
+                    disabled={!codeSessionLoading && !codeSessionUrl}
+                    className={`rounded-xl px-4 py-2 text-sm transition-colors ${
+                      !codeSessionLoading && !codeSessionUrl
+                        ? "cursor-not-allowed border border-zinc-900 bg-zinc-950 text-zinc-600"
+                        : "border border-zinc-700 bg-zinc-950 text-white hover:border-zinc-500"
+                    }`}
+                  >
+                    {codeSessionLoading ? "Booting..." : "Open builder"}
+                  </button>
+                </div>
+
                 {loadingIntegrations ? (
                   <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">
                     Loading integrations...
@@ -755,7 +795,7 @@ export default function WorkspacePage() {
                       </div>
                     ))}
                   </div>
-                ) : (
+                ) : hasSourceAnalysis ? (
                   <div className="space-y-4">
                     {connectedIntegrations
                       .map((key) => {
@@ -822,6 +862,32 @@ export default function WorkspacePage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                ) : analysisData.brief ? (
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-white font-semibold">Decision Brief</h3>
+                        <p className="mt-1 text-sm text-zinc-400">
+                          Latest stored analysis from your most recent completed run.
+                        </p>
+                      </div>
+                      <div className="text-xs font-medium text-emerald-400">
+                        {analysisData.status}
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-4 text-sm text-zinc-200">
+                      <div className="prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {analysisData.brief}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">
+                    Analysis completed, but no renderable output was returned for this run.
+                    Try refreshing or running the deep agent again.
                   </div>
                 )}
               </div>
@@ -1178,6 +1244,10 @@ export default function WorkspacePage() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                ) : codeSessionError ? (
+                  <div className="rounded-2xl border border-red-900/60 bg-red-950/20 p-6 text-sm text-red-300">
+                    {codeSessionError}
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-sm text-zinc-400">
