@@ -30,10 +30,33 @@ def _scalar_string(value: Any) -> str | None:
 
 def _decode_tool_result(value: Any) -> Any:
     if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("```") and stripped.endswith("```"):
+            stripped = "\n".join(line for line in stripped.splitlines() if not line.startswith("```"))
         try:
-            return json.loads(value)
+            return json.loads(stripped)
         except json.JSONDecodeError:
             return value
+    if isinstance(value, list):
+        return [_decode_tool_result(item) for item in value]
+    if isinstance(value, dict):
+        content = value.get("content")
+        if isinstance(content, list):
+            text_blocks: list[str] = []
+            for block in content:
+                if isinstance(block, dict):
+                    text = block.get("text")
+                    if isinstance(text, str) and text.strip():
+                        text_blocks.append(text)
+            if text_blocks:
+                joined = "\n".join(text_blocks)
+                decoded_text = _decode_tool_result(joined)
+                if decoded_text != joined:
+                    return decoded_text
+        decoded: dict[str, Any] = {}
+        for key, item in value.items():
+            decoded[key] = _decode_tool_result(item)
+        return decoded
     return value
 
 
@@ -58,7 +81,12 @@ def _first_list(value: Any) -> list[dict[str, Any]]:
             candidate = decoded.get(key)
             if isinstance(candidate, list):
                 return [item for item in candidate if isinstance(item, dict)]
-        if all(not isinstance(v, (list, dict)) for v in decoded.values()):
+        if decoded.get("content") is not None:
+            return _first_list(decoded.get("content"))
+        if any(
+            _scalar_string(decoded.get(key))
+            for key in ("id", "name", "title", "identifier", "key")
+        ):
             return [decoded]
     return []
 
