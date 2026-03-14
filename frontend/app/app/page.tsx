@@ -1071,13 +1071,22 @@ export default function WorkspacePage() {
                   <div>
                     <h2 className="text-xl font-semibold text-white">Dashboard</h2>
                   </div>
-                  <button
-                    onClick={refreshDashboardData}
-                    disabled={analysisLoading || linearDashboardLoading}
-                    className="rounded-xl border border-zinc-800 bg-black px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
-                  >
-                    {analysisLoading || linearDashboardLoading ? "Refreshing..." : "Refresh"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={runDeepAgent}
+                      disabled={agentRunning}
+                      className="rounded-xl border border-zinc-800 bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {agentRunning ? "Running..." : "Run analysis again"}
+                    </button>
+                    <button
+                      onClick={refreshDashboardData}
+                      disabled={analysisLoading || linearDashboardLoading}
+                      className="rounded-xl border border-zinc-800 bg-black px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+                    >
+                      {analysisLoading || linearDashboardLoading ? "Refreshing..." : "Refresh"}
+                    </button>
+                  </div>
                 </div>
 
                 {agentRunning && (
