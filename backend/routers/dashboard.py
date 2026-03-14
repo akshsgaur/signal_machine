@@ -229,13 +229,35 @@ def extract_active_cycle(cycles: list[dict[str, Any]]) -> dict[str, Any] | None:
     return normalized_cycles[0] if normalized_cycles else None
 
 
+def _extract_cycle_from_issues(issues: list[dict[str, Any]]) -> dict[str, Any] | None:
+    seen: dict[str, dict[str, Any]] = {}
+    for issue in issues:
+        cycle = _get_nested(issue, "cycle")
+        if not isinstance(cycle, dict):
+            continue
+        name = _get_nested_string(cycle, "name", "title")
+        if not name:
+            continue
+        cycle_id = _get_nested_string(cycle, "id") or name
+        if cycle_id not in seen:
+            seen[cycle_id] = {
+                "id": _get_nested_string(cycle, "id"),
+                "name": name,
+                "starts_at": _get_nested_string(cycle, "startsAt", "startDate"),
+                "ends_at": _get_nested_string(cycle, "endsAt", "endDate"),
+                "is_current": bool(_get_nested(cycle, "isCurrent", "current")),
+            }
+    cycles = list(seen.values())
+    return extract_active_cycle(cycles)
+
+
 def build_cycle_progress_widget(
     issues: list[dict[str, Any]],
     cycles: list[dict[str, Any]],
     statuses: list[dict[str, Any]],
 ) -> dict[str, Any]:
     counts = build_status_breakdown(issues, statuses)
-    active_cycle = extract_active_cycle(cycles)
+    active_cycle = extract_active_cycle(cycles) or _extract_cycle_from_issues(issues)
     cycle_name = active_cycle["name"] if active_cycle else None
     relevant_issues = [
         issue
@@ -398,12 +420,10 @@ async def get_linear_dashboard(user_id: str):
           team_key = team_key or issue_team_key
           team_name = team_name or issue_team_name
 
-        cycles_variants = [{"first": 5}]
         projects_variants = [{"first": 10}]
         statuses_variants = [{}]
 
         if team_id:
-            cycles_variants.insert(0, {"teamId": team_id, "first": 5})
             projects_variants.insert(0, {"teamId": team_id, "first": 10})
             statuses_variants.insert(0, {"team": team_id})
         if team_key:
@@ -413,26 +433,22 @@ async def get_linear_dashboard(user_id: str):
 
         (
             projects_result,
-            cycles_result,
             labels_result,
             statuses_result,
             users_result,
         ) = await asyncio.gather(
             _call_with_variants(tools_by_name, "list_projects", projects_variants),
-            _call_with_variants(tools_by_name, "list_cycles", cycles_variants),
             _safe_tool_call(tools_by_name, "list_issue_labels", first=30),
             _call_with_variants(tools_by_name, "list_issue_statuses", statuses_variants),
             _safe_tool_call(tools_by_name, "list_users"),
         )
 
         projects, projects_error = projects_result
-        cycles, cycles_error = cycles_result
         labels, labels_error = labels_result
         statuses, statuses_error = statuses_result
         users, users_error = users_result
 
         project_list = _collect_records(projects)
-        cycle_list = _collect_records(cycles)
         label_list = _collect_records(labels)
         status_list = _collect_records(statuses)
         user_list = _collect_records(users)
@@ -442,9 +458,9 @@ async def get_linear_dashboard(user_id: str):
                 _widget_error(issues_error) if issues_error else build_active_issues_widget(issue_list)
             ),
             "cycle_progress": (
-                _widget_error(cycles_error or issues_error or statuses_error or teams_error)
-                if cycles_error or issues_error or statuses_error
-                else build_cycle_progress_widget(issue_list, cycle_list, status_list)
+                _widget_error(issues_error or statuses_error or teams_error)
+                if issues_error or statuses_error
+                else build_cycle_progress_widget(issue_list, [], status_list)
             ),
             "projects": (
                 _widget_error(projects_error) if projects_error else build_projects_widget(project_list)
