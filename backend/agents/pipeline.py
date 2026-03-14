@@ -57,6 +57,11 @@ AGENT_FILE_MAP: dict[str, str] = {
 }
 
 
+def _should_exclude_from_synthesis(content: str) -> bool:
+    lowered = content.lower()
+    return "integration unavailable" in lowered or lowered.startswith("# pipeline error")
+
+
 def _print_progress(phase: str, agent: str, status: str, extra: str = "") -> None:
     ts = datetime.now().strftime("%H:%M:%S")
     icon = {"start": ">>>", "done": "<<<", "info": "---"}.get(status, "   ")
@@ -310,13 +315,18 @@ async def run_signal_pipeline(
             system_prompt=SYNTHESIS_AGENT_PROMPT.format(**fmt),
             state_schema=DeepAgentState,
         )
+        synthesis_files = {
+            path: content
+            for path, content in files.items()
+            if not _should_exclude_from_synthesis(content)
+        }
         synthesis_result = await synthesis_agent.ainvoke(
             {
                 "messages": [HumanMessage(content=(
-                    "Read the 4 research files (ls first to confirm they exist) and write "
+                    "Read the available research files with real evidence (ls first to confirm they exist) and write "
                     "the decision brief to output/decision_brief.md."
                 ))],
-                "files": files,
+                "files": synthesis_files,
                 "run_id": run_id,
             },
             config={"recursion_limit": 100},
