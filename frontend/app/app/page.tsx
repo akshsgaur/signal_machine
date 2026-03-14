@@ -446,6 +446,11 @@ export default function WorkspacePage() {
   );
   const linearWidgets = linearDashboard?.widgets;
   const showLinearWidgets = !!connected.linear && !!linearWidgets;
+  const showLinearWidgetNotice =
+    !!connected.linear &&
+    !linearDashboardLoading &&
+    !showLinearWidgets &&
+    !linearDashboardError;
 
   useEffect(() => {
     refreshAnalysis();
@@ -1114,6 +1119,19 @@ export default function WorkspacePage() {
                 {connected.linear && linearDashboardError && !showLinearWidgets && (
                   <div className="rounded-2xl border border-zinc-800 bg-black p-4 text-sm text-red-400">
                     {linearDashboardError}
+                  </div>
+                )}
+
+                {showLinearWidgetNotice && (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                    <div className="text-sm font-medium text-amber-300">
+                      Linear widgets are connected but did not load.
+                    </div>
+                    <div className="mt-1 text-sm text-zinc-400">
+                      The dashboard fell back to the stored brief because the live Linear
+                      widget payload was empty. Try refreshing. If this persists, the
+                      deployed backend may not have the new dashboard route live yet.
+                    </div>
                   </div>
                 )}
 
