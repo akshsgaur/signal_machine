@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 STATUS_BUCKETS = ("backlog", "active", "blocked", "done", "other")
 
 
+def _scalar_string(value: Any) -> str | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, (int, float)):
+        return str(value)
+    return None
+
+
 def _decode_tool_result(value: Any) -> Any:
     if isinstance(value, str):
         try:
@@ -65,20 +74,17 @@ def _collect_records(value: Any) -> list[dict[str, Any]]:
             continue
         if not isinstance(current, dict):
             continue
-        if any(
-            key in current
-            for key in (
-                "title",
-                "name",
-                "identifier",
-                "state",
-                "status",
-                "assignee",
-                "lead",
-                "owner",
-            )
+        title = _scalar_string(current.get("title"))
+        name = _scalar_string(current.get("name"))
+        identifier = _scalar_string(current.get("identifier"))
+        if title or identifier:
+            records.append(current)
+            continue
+        if name and any(
+            key in current for key in ("state", "status", "assignee", "lead", "owner", "priority", "cycle")
         ):
             records.append(current)
+            continue
         for value in current.values():
             if isinstance(value, (list, dict)):
                 stack.append(value)
@@ -100,6 +106,10 @@ def _get_nested(value: dict[str, Any], *paths: str) -> Any:
     return None
 
 
+def _get_nested_string(value: dict[str, Any], *paths: str) -> str | None:
+    return _scalar_string(_get_nested(value, *paths))
+
+
 def normalize_status_bucket(status_name: str | None) -> str:
     if not status_name:
         return "other"
@@ -116,7 +126,7 @@ def normalize_status_bucket(status_name: str | None) -> str:
 
 
 def _issue_status_name(issue: dict[str, Any]) -> str | None:
-    return _get_nested(
+    return _get_nested_string(
         issue,
         "state.name",
         "status.name",
@@ -129,18 +139,18 @@ def _issue_status_name(issue: dict[str, Any]) -> str | None:
 
 def _normalize_issue(issue: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": str(_get_nested(issue, "id", "identifier", "key", "title") or ""),
-        "identifier": _get_nested(issue, "identifier", "key"),
-        "title": _get_nested(issue, "title", "name") or "Untitled issue",
+        "id": _get_nested_string(issue, "id", "identifier", "key", "title") or "",
+        "identifier": _get_nested_string(issue, "identifier", "key"),
+        "title": _get_nested_string(issue, "title", "name") or "Untitled issue",
         "status": _issue_status_name(issue),
-        "assignee": _get_nested(
+        "assignee": _get_nested_string(
             issue,
             "assignee.name",
             "assignee.displayName",
             "assignee.fullName",
             "assignee.email",
         ),
-        "cycle": _get_nested(issue, "cycle.name"),
+        "cycle": _get_nested_string(issue, "cycle.name"),
         "labels": _get_nested(issue, "labels.nodes", "labels") or [],
     }
 
@@ -179,10 +189,10 @@ def extract_active_cycle(cycles: list[dict[str, Any]]) -> dict[str, Any] | None:
         ends_at = _get_nested(cycle, "endsAt", "endDate")
         normalized_cycles.append(
             {
-                "id": _get_nested(cycle, "id"),
-                "name": _get_nested(cycle, "name", "title") or "Unnamed cycle",
-                "starts_at": starts_at,
-                "ends_at": ends_at,
+                "id": _get_nested_string(cycle, "id"),
+                "name": _get_nested_string(cycle, "name", "title") or "Unnamed cycle",
+                "starts_at": _scalar_string(starts_at),
+                "ends_at": _scalar_string(ends_at),
                 "is_current": bool(_get_nested(cycle, "isCurrent", "current")),
             }
         )
@@ -239,10 +249,10 @@ def build_projects_widget(projects: list[dict[str, Any]]) -> dict[str, Any]:
     for project in projects[:6]:
         items.append(
             {
-                "id": str(_get_nested(project, "id", "name") or ""),
-                "name": _get_nested(project, "name") or "Untitled project",
-                "state": _get_nested(project, "state", "status", "health"),
-                "lead": _get_nested(
+                "id": _get_nested_string(project, "id", "name") or "",
+                "name": _get_nested_string(project, "name", "title") or "Untitled project",
+                "state": _get_nested_string(project, "state", "status", "health"),
+                "lead": _get_nested_string(
                     project,
                     "lead.name",
                     "owner.name",
@@ -257,7 +267,7 @@ def build_projects_widget(projects: list[dict[str, Any]]) -> dict[str, Any]:
 def build_top_labels(labels: list[dict[str, Any]], issues: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     counted: dict[str, int] = {}
     for label in labels:
-        name = _get_nested(label, "name")
+        name = _get_nested_string(label, "name")
         if not name:
             continue
         explicit_count = _get_nested(label, "issueCount", "count")
@@ -269,9 +279,9 @@ def build_top_labels(labels: list[dict[str, Any]], issues: list[dict[str, Any]] 
             raw_labels = _get_nested(issue, "labels.nodes", "labels") or []
             for raw_label in raw_labels:
                 if isinstance(raw_label, dict):
-                    name = _get_nested(raw_label, "name")
+                    name = _get_nested_string(raw_label, "name")
                 else:
-                    name = str(raw_label)
+                    name = _scalar_string(raw_label)
                 if name:
                     counted[name] = counted.get(name, 0) + 1
 
@@ -282,17 +292,21 @@ def build_top_labels(labels: list[dict[str, Any]], issues: list[dict[str, Any]] 
             for name, count in sorted(counted.items(), key=lambda item: (-item[1], item[0].lower()))[:8]
         ]
     else:
-        items = [{"id": _get_nested(label, "id"), "name": _get_nested(label, "name")} for label in labels[:8] if _get_nested(label, "name")]
+        items = [
+            {"id": _get_nested_string(label, "id"), "name": _get_nested_string(label, "name")}
+            for label in labels[:8]
+            if _get_nested_string(label, "name")
+        ]
     return {"items": items}
 
 
 def build_team_load(issues: list[dict[str, Any]], users: list[dict[str, Any]]) -> dict[str, Any]:
     user_names: dict[str, str] = {}
     for user in users:
-        identifier = str(_get_nested(user, "id", "email", "name") or "")
+        identifier = _get_nested_string(user, "id", "email", "name") or ""
         if not identifier:
             continue
-        user_names[identifier] = _get_nested(user, "name", "displayName", "email") or "Unknown"
+        user_names[identifier] = _get_nested_string(user, "name", "displayName", "email") or "Unknown"
 
     counts: dict[str, int] = {}
     unassigned_count = 0
@@ -300,8 +314,8 @@ def build_team_load(issues: list[dict[str, Any]], users: list[dict[str, Any]]) -
         bucket = normalize_status_bucket(_issue_status_name(issue))
         if bucket == "done":
             continue
-        assignee_id = str(_get_nested(issue, "assignee.id", "assignee.email", "assignee.name") or "")
-        assignee_name = _get_nested(issue, "assignee.name", "assignee.displayName", "assignee.email")
+        assignee_id = _get_nested_string(issue, "assignee.id", "assignee.email", "assignee.name") or ""
+        assignee_name = _get_nested_string(issue, "assignee.name", "assignee.displayName", "assignee.email")
         if assignee_id:
             user_names.setdefault(assignee_id, assignee_name or "Unknown")
             counts[assignee_id] = counts.get(assignee_id, 0) + 1
@@ -361,11 +375,11 @@ async def get_linear_dashboard(user_id: str):
         tools_by_name = {tool.name: tool for tool in tools}
 
         teams_result, teams_error = await _safe_tool_call(tools_by_name, "list_teams")
-        team_list = _collect_records(teams_result)
+        team_list = _first_list(teams_result)
         primary_team = team_list[0] if team_list else {}
-        team_id = _get_nested(primary_team, "id", "teamId")
-        team_key = _get_nested(primary_team, "key")
-        team_name = _get_nested(primary_team, "name")
+        team_id = _get_nested_string(primary_team, "id", "teamId")
+        team_key = _get_nested_string(primary_team, "key")
+        team_name = _get_nested_string(primary_team, "name")
 
         cycles_variants = [{"first": 5}]
         projects_variants = [{"first": 10}]
