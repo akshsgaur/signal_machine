@@ -54,6 +54,37 @@ def _first_list(value: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _collect_records(value: Any) -> list[dict[str, Any]]:
+    decoded = _decode_tool_result(value)
+    records: list[dict[str, Any]] = []
+    stack = [decoded]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, list):
+            stack.extend(current)
+            continue
+        if not isinstance(current, dict):
+            continue
+        if any(
+            key in current
+            for key in (
+                "title",
+                "name",
+                "identifier",
+                "state",
+                "status",
+                "assignee",
+                "lead",
+                "owner",
+            )
+        ):
+            records.append(current)
+        for value in current.values():
+            if isinstance(value, (list, dict)):
+                stack.append(value)
+    return records or _first_list(decoded)
+
+
 def _get_nested(value: dict[str, Any], *paths: str) -> Any:
     for path in paths:
         current: Any = value
@@ -298,6 +329,20 @@ async def _safe_tool_call(tools_by_name: dict[str, Any], name: str, **kwargs: An
         return None, str(exc)
 
 
+async def _call_with_variants(
+    tools_by_name: dict[str, Any],
+    name: str,
+    variants: list[dict[str, Any]],
+) -> tuple[Any | None, str | None]:
+    last_error: str | None = None
+    for kwargs in variants:
+        result, error = await _safe_tool_call(tools_by_name, name, **kwargs)
+        if error is None:
+            return result, None
+        last_error = error
+    return None, last_error
+
+
 def _widget_error(message: str) -> dict[str, Any]:
     return {"error": message}
 
@@ -315,6 +360,26 @@ async def get_linear_dashboard(user_id: str):
         tools = await client.get_tools()
         tools_by_name = {tool.name: tool for tool in tools}
 
+        teams_result, teams_error = await _safe_tool_call(tools_by_name, "list_teams")
+        team_list = _collect_records(teams_result)
+        primary_team = team_list[0] if team_list else {}
+        team_id = _get_nested(primary_team, "id", "teamId")
+        team_key = _get_nested(primary_team, "key")
+        team_name = _get_nested(primary_team, "name")
+
+        cycles_variants = [{"first": 5}]
+        projects_variants = [{"first": 10}]
+        statuses_variants = [{}]
+
+        if team_id:
+            cycles_variants.insert(0, {"teamId": team_id, "first": 5})
+            projects_variants.insert(0, {"teamId": team_id, "first": 10})
+            statuses_variants.insert(0, {"team": team_id})
+        if team_key:
+            statuses_variants.insert(0, {"team": team_key})
+        if team_name:
+            statuses_variants.insert(0, {"team": team_name})
+
         (
             issues_result,
             projects_result,
@@ -324,10 +389,10 @@ async def get_linear_dashboard(user_id: str):
             users_result,
         ) = await asyncio.gather(
             _safe_tool_call(tools_by_name, "list_issues", first=50),
-            _safe_tool_call(tools_by_name, "list_projects", first=10),
-            _safe_tool_call(tools_by_name, "list_cycles", first=5),
+            _call_with_variants(tools_by_name, "list_projects", projects_variants),
+            _call_with_variants(tools_by_name, "list_cycles", cycles_variants),
             _safe_tool_call(tools_by_name, "list_issue_labels", first=30),
-            _safe_tool_call(tools_by_name, "list_issue_statuses"),
+            _call_with_variants(tools_by_name, "list_issue_statuses", statuses_variants),
             _safe_tool_call(tools_by_name, "list_users"),
         )
 
@@ -338,19 +403,19 @@ async def get_linear_dashboard(user_id: str):
         statuses, statuses_error = statuses_result
         users, users_error = users_result
 
-        issue_list = _first_list(issues)
-        project_list = _first_list(projects)
-        cycle_list = _first_list(cycles)
-        label_list = _first_list(labels)
-        status_list = _first_list(statuses)
-        user_list = _first_list(users)
+        issue_list = _collect_records(issues)
+        project_list = _collect_records(projects)
+        cycle_list = _collect_records(cycles)
+        label_list = _collect_records(labels)
+        status_list = _collect_records(statuses)
+        user_list = _collect_records(users)
 
         widgets = {
             "active_issues": (
                 _widget_error(issues_error) if issues_error else build_active_issues_widget(issue_list)
             ),
             "cycle_progress": (
-                _widget_error(cycles_error or issues_error or statuses_error)
+                _widget_error(cycles_error or issues_error or statuses_error or teams_error)
                 if cycles_error or issues_error or statuses_error
                 else build_cycle_progress_widget(issue_list, cycle_list, status_list)
             ),
