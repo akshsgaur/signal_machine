@@ -1,5 +1,77 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export type LinearDashboardResponse = {
+  connected: boolean;
+  refreshed_at: string;
+  widgets?: {
+    active_issues: {
+      items?: Array<{
+        id: string;
+        identifier?: string;
+        title: string;
+        status?: string;
+        assignee?: string;
+        cycle?: string;
+      }>;
+      error?: string;
+    };
+    cycle_progress: {
+      active_cycle?: {
+        id?: string;
+        name: string;
+        starts_at?: string;
+        ends_at?: string;
+      } | null;
+      counts?: {
+        backlog: number;
+        active: number;
+        blocked: number;
+        done: number;
+        other: number;
+        total: number;
+      };
+      completion_pct?: number | null;
+      error?: string;
+    };
+    projects: {
+      items?: Array<{
+        id: string;
+        name: string;
+        state?: string;
+        lead?: string;
+      }>;
+      error?: string;
+    };
+    issue_status_breakdown: {
+      counts?: {
+        backlog: number;
+        active: number;
+        blocked: number;
+        done: number;
+        other: number;
+      };
+      error?: string;
+    };
+    top_labels: {
+      items?: Array<{
+        id?: string;
+        name: string;
+        count?: number;
+      }>;
+      error?: string;
+    };
+    team_load: {
+      items?: Array<{
+        id?: string;
+        name: string;
+        active_issue_count: number;
+      }>;
+      unassigned_count?: number;
+      error?: string;
+    };
+  };
+};
+
 export async function connectIntegration(
   userId: string,
   integrationType: string,
@@ -135,6 +207,14 @@ export async function getLatestAnalysis(
   sources: Record<string, string>;
 }> {
   const res = await fetch(`${API_URL}/run/latest/${userId}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getLinearDashboard(
+  userId: string
+): Promise<LinearDashboardResponse> {
+  const res = await fetch(`${API_URL}/dashboard/linear/${userId}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

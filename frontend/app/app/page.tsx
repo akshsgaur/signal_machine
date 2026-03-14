@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useClerk, useUser, UserButton } from "@clerk/nextjs";
@@ -10,6 +18,7 @@ import { useRouter } from "next/navigation";
 import {
   createInsightsFolder,
   getIntegrations,
+  getLinearDashboard,
   getLatestAnalysis,
   getCodeSessionUrl,
   getStreamUrl,
@@ -20,6 +29,7 @@ import {
   sendChat,
   startRun,
   uploadCustomerDocs,
+  type LinearDashboardResponse,
 } from "@/lib/api";
 
 type TabKey = "analysis" | "chat" | "insights" | "builder" | "profile";
@@ -98,6 +108,41 @@ const SIDEBAR_DEFAULT_WIDTH = 288;
 const SIDEBAR_PINNED_STORAGE_KEY = "signal-sidebar-pinned";
 const SIDEBAR_WIDTH_STORAGE_KEY = "signal-sidebar-width";
 
+function formatWidgetDate(value?: string) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function DashboardWidgetShell({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-2xl border border-zinc-800 bg-zinc-950 p-5 ${className}`}>
+      <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">{title}</div>
+      <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
+function WidgetEmpty({ label }: { label: string }) {
+  return <div className="text-sm text-zinc-500">{label}</div>;
+}
+
+function WidgetError({ label }: { label: string }) {
+  return <div className="text-sm text-red-400">{label}</div>;
+}
+
 export default function WorkspacePage() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
@@ -153,6 +198,9 @@ export default function WorkspacePage() {
     brief: string | null;
     sources: Record<string, string>;
   } | null>(null);
+  const [linearDashboard, setLinearDashboard] = useState<LinearDashboardResponse | null>(null);
+  const [linearDashboardLoading, setLinearDashboardLoading] = useState(false);
+  const [linearDashboardError, setLinearDashboardError] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -321,6 +369,33 @@ export default function WorkspacePage() {
     }
   }, [user]);
 
+  const refreshLinearDashboard = useCallback(async () => {
+    if (!user) return;
+    if (!connected.linear) {
+      setLinearDashboard(null);
+      setLinearDashboardError("");
+      setLinearDashboardLoading(false);
+      return;
+    }
+    setLinearDashboardLoading(true);
+    setLinearDashboardError("");
+    try {
+      const data = await getLinearDashboard(user.id);
+      setLinearDashboard(data);
+    } catch (err: unknown) {
+      setLinearDashboard(null);
+      setLinearDashboardError(
+        err instanceof Error ? err.message : "Failed to load Linear widgets"
+      );
+    } finally {
+      setLinearDashboardLoading(false);
+    }
+  }, [connected.linear, user]);
+
+  const refreshDashboardData = useCallback(async () => {
+    await Promise.all([refreshAnalysis(), refreshLinearDashboard()]);
+  }, [refreshAnalysis, refreshLinearDashboard]);
+
   const runDeepAgent = useCallback(async () => {
     if (!user || agentRunning) return;
     setAgentRunning(true);
@@ -369,10 +444,23 @@ export default function WorkspacePage() {
     () => !!analysisData && Object.keys(analysisData.sources ?? {}).length > 0,
     [analysisData]
   );
+  const linearWidgets = linearDashboard?.widgets;
+  const showLinearWidgets = !!connected.linear && !!linearWidgets;
 
   useEffect(() => {
     refreshAnalysis();
   }, [refreshAnalysis]);
+
+  useEffect(() => {
+    if (loadingIntegrations) return;
+    if (!connected.linear) {
+      setLinearDashboard(null);
+      setLinearDashboardError("");
+      setLinearDashboardLoading(false);
+      return;
+    }
+    refreshLinearDashboard();
+  }, [connected.linear, loadingIntegrations, refreshLinearDashboard]);
 
   useEffect(() => {
     if (!user || loadingIntegrations) return;
@@ -979,10 +1067,11 @@ export default function WorkspacePage() {
                     <h2 className="text-xl font-semibold text-white">Dashboard</h2>
                   </div>
                   <button
-                    onClick={refreshAnalysis}
+                    onClick={refreshDashboardData}
+                    disabled={analysisLoading || linearDashboardLoading}
                     className="rounded-xl border border-zinc-800 bg-black px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
                   >
-                    Refresh
+                    {analysisLoading || linearDashboardLoading ? "Refreshing..." : "Refresh"}
                   </button>
                 </div>
 
@@ -1022,7 +1111,225 @@ export default function WorkspacePage() {
                   <div className="mb-3 text-sm text-red-400">{analysisError}</div>
                 )}
 
+                {connected.linear && linearDashboardError && !showLinearWidgets && (
+                  <div className="rounded-2xl border border-zinc-800 bg-black p-4 text-sm text-red-400">
+                    {linearDashboardError}
+                  </div>
+                )}
+
                 {!agentRunning && <div ref={runStatusRef} />}
+
+                {connected.linear && linearDashboardLoading && !showLinearWidgets && (
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className={`rounded-2xl border border-zinc-800 bg-zinc-950 p-5 ${
+                          index === 3 ? "lg:col-span-2" : ""
+                        }`}
+                      >
+                        <div className="h-3 w-28 animate-pulse rounded bg-zinc-800" />
+                        <div className="mt-4 space-y-3">
+                          <div className="h-4 w-full animate-pulse rounded bg-zinc-900" />
+                          <div className="h-4 w-5/6 animate-pulse rounded bg-zinc-900" />
+                          <div className="h-4 w-2/3 animate-pulse rounded bg-zinc-900" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {showLinearWidgets && (
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <DashboardWidgetShell title="Cycle Progress">
+                      {linearWidgets?.cycle_progress.error ? (
+                        <WidgetError label={linearWidgets.cycle_progress.error} />
+                      ) : (
+                        <div className="space-y-4">
+                          <div>
+                            <div className="text-lg font-semibold text-white">
+                              {linearWidgets?.cycle_progress.active_cycle?.name ?? "No active cycle"}
+                            </div>
+                            {linearWidgets?.cycle_progress.active_cycle && (
+                              <div className="mt-1 text-sm text-zinc-500">
+                                {formatWidgetDate(
+                                  linearWidgets.cycle_progress.active_cycle.starts_at
+                                )}
+                                {linearWidgets.cycle_progress.active_cycle.ends_at
+                                  ? ` - ${formatWidgetDate(
+                                      linearWidgets.cycle_progress.active_cycle.ends_at
+                                    )}`
+                                  : ""}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-end justify-between">
+                              <div className="text-3xl font-semibold text-white">
+                                {linearWidgets?.cycle_progress.completion_pct ?? "--"}%
+                              </div>
+                              <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                                completion
+                              </div>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-900">
+                              <div
+                                className="h-full rounded-full bg-emerald-500"
+                                style={{
+                                  width: `${
+                                    linearWidgets?.cycle_progress.completion_pct ?? 0
+                                  }%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 text-sm">
+                            <div className="rounded-xl border border-zinc-800 p-3">
+                              <div className="text-zinc-500">Done</div>
+                              <div className="mt-1 font-semibold text-white">
+                                {linearWidgets?.cycle_progress.counts?.done ?? 0}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-800 p-3">
+                              <div className="text-zinc-500">Active</div>
+                              <div className="mt-1 font-semibold text-white">
+                                {linearWidgets?.cycle_progress.counts?.active ?? 0}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-800 p-3">
+                              <div className="text-zinc-500">Total</div>
+                              <div className="mt-1 font-semibold text-white">
+                                {linearWidgets?.cycle_progress.counts?.total ?? 0}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </DashboardWidgetShell>
+
+                    <DashboardWidgetShell title="Issue Status Breakdown">
+                      {linearWidgets?.issue_status_breakdown.error ? (
+                        <WidgetError label={linearWidgets.issue_status_breakdown.error} />
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            ["Backlog", linearWidgets?.issue_status_breakdown.counts?.backlog ?? 0],
+                            ["Active", linearWidgets?.issue_status_breakdown.counts?.active ?? 0],
+                            ["Blocked", linearWidgets?.issue_status_breakdown.counts?.blocked ?? 0],
+                            ["Done", linearWidgets?.issue_status_breakdown.counts?.done ?? 0],
+                          ].map(([label, value]) => (
+                            <div key={label} className="rounded-xl border border-zinc-800 p-4">
+                              <div className="text-sm text-zinc-500">{label}</div>
+                              <div className="mt-2 text-2xl font-semibold text-white">{value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </DashboardWidgetShell>
+
+                    <DashboardWidgetShell title="Team Load">
+                      {linearWidgets?.team_load.error ? (
+                        <WidgetError label={linearWidgets.team_load.error} />
+                      ) : linearWidgets?.team_load.items?.length ? (
+                        <div className="space-y-3">
+                          {linearWidgets.team_load.items.map((item) => (
+                            <div
+                              key={item.id ?? item.name}
+                              className="flex items-center justify-between rounded-xl border border-zinc-800 px-3 py-3"
+                            >
+                              <span className="text-sm text-white">{item.name}</span>
+                              <span className="text-sm font-medium text-zinc-400">
+                                {item.active_issue_count}
+                              </span>
+                            </div>
+                          ))}
+                          {linearWidgets.team_load.unassigned_count ? (
+                            <div className="flex items-center justify-between rounded-xl border border-dashed border-zinc-800 px-3 py-3">
+                              <span className="text-sm text-zinc-400">Unassigned</span>
+                              <span className="text-sm font-medium text-zinc-400">
+                                {linearWidgets.team_load.unassigned_count}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <WidgetEmpty label="No active assignee load yet." />
+                      )}
+                    </DashboardWidgetShell>
+
+                    <DashboardWidgetShell title="Active Issues" className="lg:col-span-2">
+                      {linearWidgets?.active_issues.error ? (
+                        <WidgetError label={linearWidgets.active_issues.error} />
+                      ) : linearWidgets?.active_issues.items?.length ? (
+                        <div className="space-y-3">
+                          {linearWidgets.active_issues.items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-start justify-between gap-4 rounded-xl border border-zinc-800 px-4 py-3"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-white">
+                                  {item.identifier ? `${item.identifier} · ` : ""}
+                                  {item.title}
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-3 text-xs text-zinc-500">
+                                  {item.status && <span>{item.status}</span>}
+                                  {item.assignee && <span>{item.assignee}</span>}
+                                  {item.cycle && <span>{item.cycle}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <WidgetEmpty label="No active issues found." />
+                      )}
+                    </DashboardWidgetShell>
+
+                    <DashboardWidgetShell title="Projects">
+                      {linearWidgets?.projects.error ? (
+                        <WidgetError label={linearWidgets.projects.error} />
+                      ) : linearWidgets?.projects.items?.length ? (
+                        <div className="space-y-3">
+                          {linearWidgets.projects.items.map((project) => (
+                            <div
+                              key={project.id}
+                              className="rounded-xl border border-zinc-800 px-3 py-3"
+                            >
+                              <div className="text-sm font-medium text-white">{project.name}</div>
+                              <div className="mt-1 flex flex-wrap gap-3 text-xs text-zinc-500">
+                                {project.state && <span>{project.state}</span>}
+                                {project.lead && <span>{project.lead}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <WidgetEmpty label="No active projects found." />
+                      )}
+                    </DashboardWidgetShell>
+
+                    <DashboardWidgetShell title="Top Labels">
+                      {linearWidgets?.top_labels.error ? (
+                        <WidgetError label={linearWidgets.top_labels.error} />
+                      ) : linearWidgets?.top_labels.items?.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {linearWidgets.top_labels.items.map((label) => (
+                            <span
+                              key={label.id ?? label.name}
+                              className="rounded-full border border-zinc-800 px-3 py-2 text-sm text-zinc-300"
+                            >
+                              {label.name}
+                              {typeof label.count === "number" ? ` · ${label.count}` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <WidgetEmpty label="No label data available." />
+                      )}
+                    </DashboardWidgetShell>
+                  </div>
+                )}
 
                 {loadingIntegrations ? (
                   <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">

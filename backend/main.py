@@ -16,7 +16,7 @@ logging.getLogger("mcp.client.streamable_http").setLevel(logging.CRITICAL)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import admin, chat, integrations, pipeline, insights, slack, code_proxy
+from routers import admin, chat, code_proxy, dashboard, insights, integrations, pipeline, slack
 
 app = FastAPI(title="Signal PM Intelligence Platform", version="0.1.0")
 
@@ -52,6 +52,7 @@ app.include_router(admin.router)
 app.include_router(insights.router)
 app.include_router(slack.router)
 app.include_router(code_proxy.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")
