@@ -155,6 +155,14 @@ def _normalize_issue(issue: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extract_issue_team(issue: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    return (
+        _get_nested_string(issue, "team.id"),
+        _get_nested_string(issue, "team.key"),
+        _get_nested_string(issue, "team.name"),
+    )
+
+
 def build_active_issues_widget(issues: list[dict[str, Any]]) -> dict[str, Any]:
     normalized = [_normalize_issue(issue) for issue in issues]
     active_first = sorted(
@@ -374,12 +382,21 @@ async def get_linear_dashboard(user_id: str):
         tools = await client.get_tools()
         tools_by_name = {tool.name: tool for tool in tools}
 
+        issues_result, issues_error = await _safe_tool_call(tools_by_name, "list_issues", first=50)
+        issue_list = _collect_records(issues_result)
+
         teams_result, teams_error = await _safe_tool_call(tools_by_name, "list_teams")
         team_list = _first_list(teams_result)
         primary_team = team_list[0] if team_list else {}
         team_id = _get_nested_string(primary_team, "id", "teamId")
         team_key = _get_nested_string(primary_team, "key")
         team_name = _get_nested_string(primary_team, "name")
+
+        if not team_id and issue_list:
+          issue_team_id, issue_team_key, issue_team_name = _extract_issue_team(issue_list[0])
+          team_id = team_id or issue_team_id
+          team_key = team_key or issue_team_key
+          team_name = team_name or issue_team_name
 
         cycles_variants = [{"first": 5}]
         projects_variants = [{"first": 10}]
@@ -395,14 +412,12 @@ async def get_linear_dashboard(user_id: str):
             statuses_variants.insert(0, {"team": team_name})
 
         (
-            issues_result,
             projects_result,
             cycles_result,
             labels_result,
             statuses_result,
             users_result,
         ) = await asyncio.gather(
-            _safe_tool_call(tools_by_name, "list_issues", first=50),
             _call_with_variants(tools_by_name, "list_projects", projects_variants),
             _call_with_variants(tools_by_name, "list_cycles", cycles_variants),
             _safe_tool_call(tools_by_name, "list_issue_labels", first=30),
@@ -410,14 +425,12 @@ async def get_linear_dashboard(user_id: str):
             _safe_tool_call(tools_by_name, "list_users"),
         )
 
-        issues, issues_error = issues_result
         projects, projects_error = projects_result
         cycles, cycles_error = cycles_result
         labels, labels_error = labels_result
         statuses, statuses_error = statuses_result
         users, users_error = users_result
 
-        issue_list = _collect_records(issues)
         project_list = _collect_records(projects)
         cycle_list = _collect_records(cycles)
         label_list = _collect_records(labels)
