@@ -1805,22 +1805,13 @@ export default function WorkspacePage() {
                       <h2 className="text-2xl font-semibold tracking-tight text-white lg:text-[2rem]">
                         Product Chat
                       </h2>
-                      <p className="mt-2 text-base text-zinc-400">
-                        Ask questions about your product data and trends.
-                      </p>
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto px-6 py-6 lg:px-10">
+                  <div className="flex-1 overflow-y-auto px-6 py-8 lg:px-10">
                     <div className="mx-auto flex max-w-4xl flex-col gap-5">
                       {chatLoadingHistory && (
                         <div className="text-sm text-zinc-500">Loading chat...</div>
-                      )}
-
-                      {chatMessages.length === 0 && !chatLoadingHistory && (
-                        <div className="rounded-[24px] border border-zinc-800/80 bg-zinc-950 px-6 py-5 text-zinc-300">
-                          Ask me anything about your product. I can summarize trends and signals.
-                        </div>
                       )}
 
                       {chatMessages.map((msg) => (
@@ -1875,25 +1866,27 @@ export default function WorkspacePage() {
                     </div>
                   </div>
 
-                  <div className="border-t border-zinc-800/90 px-6 py-5 lg:px-10">
+                  <div className="px-6 pb-6 pt-3 lg:px-10 lg:pb-8">
                     <div className="mx-auto max-w-4xl">
                       {chatError && <div className="mb-3 text-sm text-red-400">{chatError}</div>}
-                      <div className="flex items-center gap-3 rounded-[28px] border border-zinc-700/80 bg-zinc-900/90 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
-                        <input
-                          type="text"
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Ask anything about your product..."
-                          className="flex-1 bg-transparent text-base text-white placeholder:text-zinc-500 focus:outline-none"
-                          onKeyDown={(e) => e.key === "Enter" && !chatSending && sendMessage()}
-                        />
-                        <button
-                          onClick={sendMessage}
-                          disabled={!chatInput.trim() || chatSending}
-                          className="inline-flex h-11 items-center justify-center rounded-full bg-zinc-200 px-4 text-sm font-medium text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-                        >
-                          {chatSending ? "Sending..." : "Send"}
-                        </button>
+                      <div className="rounded-[32px] border border-zinc-700/70 bg-zinc-900/92 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.34)] ring-1 ring-white/5 backdrop-blur-sm">
+                        <div className="flex items-center gap-3 rounded-[26px] bg-transparent px-2 py-1">
+                          <input
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            placeholder="Ask anything about your product..."
+                            className="flex-1 bg-transparent px-2 text-[1.05rem] text-white placeholder:text-zinc-500 focus:outline-none"
+                            onKeyDown={(e) => e.key === "Enter" && !chatSending && sendMessage()}
+                          />
+                          <button
+                            onClick={sendMessage}
+                            disabled={!chatInput.trim() || chatSending}
+                            className="inline-flex h-14 min-w-[92px] items-center justify-center rounded-full bg-zinc-700/90 px-5 text-base font-medium text-zinc-200 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                          >
+                            {chatSending ? "Sending..." : "Send"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
