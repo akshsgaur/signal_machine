@@ -1768,31 +1768,29 @@ export default function WorkspacePage() {
             )}
 
             {activeTab === "chat" && (
-              <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4">
-                <aside className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">Chats</h3>
+              <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-950 lg:grid lg:min-h-[calc(100vh-168px)] lg:grid-cols-[280px_minmax(0,1fr)]">
+                <aside className="border-b border-zinc-800/90 bg-zinc-950/96 lg:border-b-0 lg:border-r">
+                  <div className="flex items-center justify-between px-5 py-5">
+                    <h3 className="text-[15px] font-semibold tracking-tight text-white">Chats</h3>
                     <button
                       onClick={startNewChat}
-                      className="text-xs text-emerald-400 hover:text-emerald-300"
+                      className="text-sm font-medium text-emerald-400 transition-colors hover:text-emerald-300"
                     >
                       New
                     </button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="max-h-[260px] space-y-1 overflow-y-auto px-3 pb-4 lg:max-h-none lg:h-[calc(100vh-248px)]">
                     {chatSessions.length === 0 && (
-                      <div className="text-xs text-zinc-500">
-                        No history yet.
-                      </div>
+                      <div className="px-3 py-2 text-sm text-zinc-500">No history yet.</div>
                     )}
                     {chatSessions.map((session) => (
                       <button
                         key={session.id}
                         onClick={() => loadSession(session.id)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                        className={`w-full truncate rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
                           session.id === chatSessionId
-                            ? "bg-emerald-500/15 text-emerald-200"
-                            : "bg-zinc-950 text-zinc-300 hover:text-white hover:bg-zinc-800"
+                            ? "bg-zinc-800 text-white"
+                            : "text-zinc-400 hover:bg-zinc-900/80 hover:text-zinc-100"
                         }`}
                       >
                         {getRenderedChatTitle(session, streamingChatTitles)}
@@ -1801,83 +1799,104 @@ export default function WorkspacePage() {
                   </div>
                 </aside>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col min-h-[520px]">
-                <div className="mb-4">
-                  <h2 className="text-xl font-semibold">Product Chat</h2>
-                  <p className="text-sm text-zinc-400">
-                    Ask questions about your product data and trends.
-                  </p>
-                </div>
-                <div className="flex-1 overflow-auto space-y-4 pr-2">
-                  {chatLoadingHistory && (
-                    <div className="text-sm text-zinc-500">Loading chat...</div>
-                  )}
-                  {chatMessages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                        msg.role === "user"
-                          ? "bg-white text-black ml-auto"
-                          : "bg-zinc-900/90 border border-zinc-800 text-zinc-100"
-                      }`}
-                    >
-                      {msg.role === "assistant" ? (
-                        <div>
-                          {msg.isStreaming && (
-                            <ChatActivityFeed message={msg} />
-                          )}
-                          {msg.content && (
-                            <div className="prose prose-invert prose-sm max-w-none">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {msg.content}
-                              </ReactMarkdown>
-                            </div>
-                          )}
-                          {msg.status === "error" && !msg.content && (
-                            <div className="text-sm text-red-400">
-                              The chat request failed. Please try again.
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="whitespace-pre-wrap">{msg.content}</div>
-                      )}
-                      {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-zinc-500">
-                          <span className="text-zinc-400">Sources</span>
-                          {msg.sources.map((source) => (
-                            <span
-                              key={source}
-                              className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-300"
-                            >
-                              {source}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                <div className="flex min-h-[560px] flex-col bg-zinc-950">
+                  <div className="border-b border-zinc-800/90 px-6 py-6 lg:px-10">
+                    <div className="mx-auto max-w-4xl">
+                      <h2 className="text-2xl font-semibold tracking-tight text-white lg:text-[2rem]">
+                        Product Chat
+                      </h2>
+                      <p className="mt-2 text-base text-zinc-400">
+                        Ask questions about your product data and trends.
+                      </p>
                     </div>
-                  ))}
-                </div>
-                {chatError && (
-                  <div className="mt-2 text-sm text-red-400">{chatError}</div>
-                )}
-                <div className="mt-4 flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Ask a question about your product..."
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
-                    onKeyDown={(e) => e.key === "Enter" && !chatSending && sendMessage()}
-                  />
-                  <button
-                    onClick={sendMessage}
-                    disabled={!chatInput.trim() || chatSending}
-                    className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {chatSending ? "Sending..." : "Send"}
-                  </button>
-                </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto px-6 py-6 lg:px-10">
+                    <div className="mx-auto flex max-w-4xl flex-col gap-5">
+                      {chatLoadingHistory && (
+                        <div className="text-sm text-zinc-500">Loading chat...</div>
+                      )}
+
+                      {chatMessages.length === 0 && !chatLoadingHistory && (
+                        <div className="rounded-[24px] border border-zinc-800/80 bg-zinc-950 px-6 py-5 text-zinc-300">
+                          Ask me anything about your product. I can summarize trends and signals.
+                        </div>
+                      )}
+
+                      {chatMessages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={`text-sm ${
+                            msg.role === "user" ? "ml-auto max-w-[80%]" : "max-w-[88%]"
+                          }`}
+                        >
+                          <div
+                            className={`rounded-[24px] px-5 py-4 ${
+                              msg.role === "user"
+                                ? "bg-white text-black"
+                                : "bg-transparent text-zinc-100"
+                            }`}
+                          >
+                            {msg.role === "assistant" ? (
+                              <div>
+                                {msg.isStreaming && <ChatActivityFeed message={msg} />}
+                                {msg.content && (
+                                  <div className="prose prose-invert prose-sm max-w-none">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                      {msg.content}
+                                    </ReactMarkdown>
+                                  </div>
+                                )}
+                                {msg.status === "error" && !msg.content && (
+                                  <div className="text-sm text-red-400">
+                                    The chat request failed. Please try again.
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="whitespace-pre-wrap">{msg.content}</div>
+                            )}
+                            {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
+                              <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                                <span className="text-zinc-500">Sources</span>
+                                {msg.sources.map((source) => (
+                                  <span
+                                    key={source}
+                                    className="rounded-full border border-zinc-800 bg-zinc-900/80 px-2.5 py-1 text-zinc-300"
+                                  >
+                                    {source}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-zinc-800/90 px-6 py-5 lg:px-10">
+                    <div className="mx-auto max-w-4xl">
+                      {chatError && <div className="mb-3 text-sm text-red-400">{chatError}</div>}
+                      <div className="flex items-center gap-3 rounded-[28px] border border-zinc-700/80 bg-zinc-900/90 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Ask anything about your product..."
+                          className="flex-1 bg-transparent text-base text-white placeholder:text-zinc-500 focus:outline-none"
+                          onKeyDown={(e) => e.key === "Enter" && !chatSending && sendMessage()}
+                        />
+                        <button
+                          onClick={sendMessage}
+                          disabled={!chatInput.trim() || chatSending}
+                          className="inline-flex h-11 items-center justify-center rounded-full bg-zinc-200 px-4 text-sm font-medium text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                        >
+                          {chatSending ? "Sending..." : "Send"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
