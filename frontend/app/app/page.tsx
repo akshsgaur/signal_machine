@@ -27,9 +27,9 @@ import {
   listChatSessions,
   listCustomerDocs,
   listInsightsFolders,
-  sendChat,
   startChatSession,
   startRun,
+  streamChat,
   uploadCustomerDocs,
   type LinearDashboardResponse,
   type IntegrationStatus,
@@ -64,6 +64,15 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   sources?: string[];
+  status?: "thinking" | "complete" | "error";
+  activitySteps?: Array<{
+    id: string;
+    label: string;
+    status: "active" | "complete";
+  }>;
+  activitySummary?: string;
+  showActivityDetails?: boolean;
+  isStreaming?: boolean;
 };
 
 type ChatSession = {
@@ -144,6 +153,87 @@ function WidgetEmpty({ label }: { label: string }) {
 
 function WidgetError({ label }: { label: string }) {
   return <div className="text-sm text-red-400">{label}</div>;
+}
+
+function ThinkingAnimation() {
+  return (
+    <div className="inline-flex items-center gap-3 rounded-full border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-300">
+      <span className="font-medium text-zinc-200">Thinking</span>
+      <span className="thinking-shimmer h-2 w-20 rounded-full bg-zinc-800" />
+    </div>
+  );
+}
+
+function ActivitySummaryPill({
+  label,
+  expanded,
+  onToggle,
+}: {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+    >
+      <span>{label}</span>
+      <span className={`transition-transform ${expanded ? "rotate-90" : ""}`}>›</span>
+    </button>
+  );
+}
+
+function ChatActivityFeed({
+  message,
+  onToggle,
+}: {
+  message: ChatMessage;
+  onToggle: () => void;
+}) {
+  const steps = message.activitySteps ?? [];
+  const showThinking = message.isStreaming && steps.length === 0;
+  const showExpanded = (message.isStreaming && steps.length > 0) || message.showActivityDetails;
+
+  return (
+    <div className="mb-3 space-y-3">
+      {showThinking && <ThinkingAnimation />}
+
+      {message.activitySummary && (
+        <ActivitySummaryPill
+          label={message.activitySummary}
+          expanded={!!message.showActivityDetails}
+          onToggle={onToggle}
+        />
+      )}
+
+      {showExpanded && steps.length > 0 && (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-3">
+          <div className="space-y-2">
+            {steps.map((step, index) => (
+              <div
+                key={step.id}
+                className={`activity-step flex items-center gap-3 rounded-xl px-2 py-1.5 text-sm transition-all ${
+                  step.status === "active" ? "text-zinc-100" : "text-zinc-400"
+                }`}
+                style={{ animationDelay: `${index * 80}ms` }}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    step.status === "active" ? "bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.55)]" : "bg-zinc-600"
+                  }`}
+                />
+                <span className={step.status === "active" ? "font-medium" : ""}>
+                  {step.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function getRenderedChatTitle(
@@ -621,6 +711,20 @@ export default function WorkspacePage() {
     [refreshChatSessions]
   );
 
+  const updateAssistantPlaceholder = useCallback(
+    (
+      messageId: string,
+      update: (message: ChatMessage) => ChatMessage
+    ) => {
+      setChatMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId ? update(message) : message
+        )
+      );
+    },
+    []
+  );
+
   async function sendMessage() {
     const content = chatInput.trim();
     if (!content) return;
@@ -629,7 +733,20 @@ export default function WorkspacePage() {
       role: "user",
       content,
     };
+    const assistantPlaceholderId = `a-pending-${Date.now()}`;
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantPlaceholderId,
+      role: "assistant",
+      content: "",
+      status: "thinking",
+      activitySteps: [],
+      activitySummary: "Thinking",
+      showActivityDetails: false,
+      isStreaming: true,
+      sources: [],
+    };
     setChatMessages((prev) => [...prev, userMsg]);
+    setChatMessages((prev) => [...prev, assistantPlaceholder]);
     setChatInput("");
     setChatSending(true);
     setChatError("");
@@ -662,23 +779,119 @@ export default function WorkspacePage() {
         .filter((msg) => msg.role === "user" || msg.role === "assistant")
         .map((msg) => ({ role: msg.role, content: msg.content }))
         .concat({ role: "user", content });
-      const response = await sendChat(
+
+      await streamChat(
         user.id,
         payload,
         activeSessionId ?? undefined,
         undefined,
-        activeFolder ?? undefined
+        activeFolder ?? undefined,
+        {
+          onEvent: (event) => {
+            if (event.type === "thinking_start") {
+              updateAssistantPlaceholder(assistantPlaceholderId, (message) => ({
+                ...message,
+                status: "thinking",
+                activitySummary: "Thinking",
+                isStreaming: true,
+              }));
+              return;
+            }
+
+            if (event.type === "activity_step") {
+              updateAssistantPlaceholder(assistantPlaceholderId, (message) => {
+                const existing = message.activitySteps ?? [];
+                const nextStatus: "active" | "complete" = event.status;
+                const nextSteps: Array<{
+                  id: string;
+                  label: string;
+                  status: "active" | "complete";
+                }> = existing.some((step) => step.id === event.step_id)
+                  ? existing.map((step) =>
+                      step.id === event.step_id
+                        ? { id: step.id, label: event.label, status: nextStatus }
+                        : event.status === "active"
+                          ? { id: step.id, label: step.label, status: "complete" as const }
+                          : { id: step.id, label: step.label, status: step.status }
+                    )
+                  : [
+                      ...existing.map((step) =>
+                        event.status === "active"
+                          ? { id: step.id, label: step.label, status: "complete" as const }
+                          : { id: step.id, label: step.label, status: step.status }
+                      ),
+                      { id: event.step_id, label: event.label, status: nextStatus },
+                    ];
+
+                return {
+                  ...message,
+                  status: "thinking",
+                  activitySummary: undefined,
+                  activitySteps: nextSteps,
+                  isStreaming: true,
+                };
+              });
+              return;
+            }
+
+            if (event.type === "activity_complete") {
+              updateAssistantPlaceholder(assistantPlaceholderId, (message) => ({
+                ...message,
+                activitySummary: event.summary,
+                showActivityDetails: false,
+              }));
+              return;
+            }
+
+            if (event.type === "final_response") {
+              updateAssistantPlaceholder(assistantPlaceholderId, (message) => ({
+                ...message,
+                content: event.message,
+                sources: event.sources_used,
+                status: "complete",
+              }));
+              setChatSessionId(event.session_id);
+              return;
+            }
+
+            if (event.type === "done") {
+              updateAssistantPlaceholder(assistantPlaceholderId, (message) => ({
+                ...message,
+                isStreaming: false,
+                status: message.status === "error" ? "error" : "complete",
+                activitySummary: message.activitySummary ?? "Thought through the request",
+              }));
+              void refreshChatSessions();
+              return;
+            }
+
+            if (event.type === "error") {
+              updateAssistantPlaceholder(assistantPlaceholderId, (message) => ({
+                ...message,
+                status: "error",
+                isStreaming: false,
+                content: message.content || "The chat request failed. Please try again.",
+                activitySummary: "Request interrupted",
+              }));
+              setChatError(event.message);
+            }
+          },
+        }
       );
-      const assistantMsg: ChatMessage = {
-        id: `a-${Date.now()}`,
-        role: "assistant",
-        content: response.message,
-        sources: response.sources_used,
-      };
-      setChatSessionId(response.session_id);
-      setChatMessages((prev) => [...prev, assistantMsg]);
-      await refreshChatSessions();
     } catch (err: unknown) {
+      setChatMessages((prev) =>
+        prev.map((message) =>
+          message.id === assistantPlaceholderId
+            ? {
+                ...message,
+                status: "error",
+                isStreaming: false,
+                content: "The chat request failed. Please try again.",
+                activitySummary: "Request interrupted",
+              }
+            : message
+        )
+      );
       setChatError(err instanceof Error ? err.message : "Chat failed");
     } finally {
       setChatSending(false);
@@ -1636,10 +1849,36 @@ export default function WorkspacePage() {
                       }`}
                     >
                       {msg.role === "assistant" ? (
-                        <div className="prose prose-invert prose-sm max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {msg.content}
-                          </ReactMarkdown>
+                        <div>
+                          {(msg.isStreaming || msg.activitySummary || (msg.activitySteps?.length ?? 0) > 0) && (
+                            <ChatActivityFeed
+                              message={msg}
+                              onToggle={() =>
+                                setChatMessages((prev) =>
+                                  prev.map((message) =>
+                                    message.id === msg.id
+                                      ? {
+                                          ...message,
+                                          showActivityDetails: !message.showActivityDetails,
+                                        }
+                                      : message
+                                  )
+                                )
+                              }
+                            />
+                          )}
+                          {msg.content && (
+                            <div className="prose prose-invert prose-sm max-w-none">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {msg.content}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+                          {msg.status === "error" && !msg.content && (
+                            <div className="text-sm text-red-400">
+                              The chat request failed. Please try again.
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="whitespace-pre-wrap">{msg.content}</div>

@@ -230,6 +230,70 @@ export async function sendChat(
   return res.json();
 }
 
+type StreamChatEvent =
+  | { type: "thinking_start"; session_id: string }
+  | { type: "activity_step"; session_id: string; step_id: string; label: string; status: "active" | "complete" }
+  | { type: "activity_complete"; session_id: string; summary: string; tool_count: number }
+  | { type: "final_response"; session_id: string; message: string; sources_used: string[] }
+  | { type: "done"; session_id: string }
+  | { type: "error"; session_id?: string; message: string };
+
+type StreamChatHandlers = {
+  onEvent: (event: StreamChatEvent) => void;
+};
+
+function createSseEventParser(onEvent: (event: StreamChatEvent) => void) {
+  let buffer = "";
+  return (chunk: string) => {
+    buffer += chunk;
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      const dataLines = part
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim());
+      if (!dataLines.length) continue;
+      const payload = dataLines.join("\n");
+      onEvent(JSON.parse(payload) as StreamChatEvent);
+    }
+  };
+}
+
+export async function streamChat(
+  userId: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  sessionId?: string,
+  title?: string,
+  folderName?: string,
+  handlers?: StreamChatHandlers
+): Promise<void> {
+  const res = await fetch(`${API_URL}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: userId,
+      messages,
+      session_id: sessionId ?? null,
+      title: title ?? null,
+      folder_name: folderName ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  if (!res.body) throw new Error("No response stream returned.");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const handleChunk = createSseEventParser((event) => handlers?.onEvent(event));
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    handleChunk(decoder.decode(value, { stream: true }));
+  }
+  handleChunk(decoder.decode());
+}
+
 export async function startChatSession(
   userId: string,
   firstMessage: string,

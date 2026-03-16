@@ -25,3 +25,58 @@ body {
     text-wrap: balance;
   }
 }
+
+@keyframes thinking-shimmer {
+  0% {
+    opacity: 0.35;
+    transform: translateX(-12%);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translateX(12%);
+  }
+  100% {
+    opacity: 0.35;
+    transform: translateX(-12%);
+  }
+}
+
+@keyframes activity-step-in {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.thinking-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.thinking-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: thinking-shimmer 1.2s ease-in-out infinite;
+}
+
+.activity-step {
+  animation: activity-step-in 0.2s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-shimmer::after,
+  .activity-step {
+    animation: none;
+  }
+}
