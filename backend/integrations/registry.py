@@ -61,6 +61,7 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
             CredentialField("base_url", "Aha! URL", "url", "https://company.aha.io"),
             CredentialField("api_token", "API Token", "password", "Paste Aha! API token"),
         ],
+        logo_path="/aha_logo.png",
         chat_enabled=True,
         builder_key="aha",
     ),
@@ -129,6 +130,7 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
         credential_schema=[
             CredentialField("api_token", "API Token", "password", "Paste monday.com API token")
         ],
+        logo_path="/monday_logo.png",
         chat_enabled=True,
         builder_key="monday",
     ),
@@ -181,6 +183,7 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
             CredentialField("pat_name", "PAT Name", "text", "signal-integration"),
             CredentialField("pat_secret", "PAT Secret", "password", "Paste Tableau PAT secret"),
         ],
+        logo_path="/Tableau.jpg",
         chat_enabled=True,
         builder_key="tableau",
     ),
