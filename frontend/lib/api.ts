@@ -230,6 +230,24 @@ export async function sendChat(
   return res.json();
 }
 
+export async function startChatSession(
+  userId: string,
+  firstMessage: string,
+  title = "Product chat"
+): Promise<{ session_id: string; title: string }> {
+  const res = await fetch(`${API_URL}/chat/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: userId,
+      first_message: firstMessage,
+      title,
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function listChatSessions(
   userId: string
 ): Promise<Array<{ id: string; title: string | null; updated_at: string | null }>> {
@@ -251,6 +269,10 @@ export async function listChatMessages(
   const res = await fetch(`${API_URL}/chat/sessions/${sessionId}/messages`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export function getChatTitleStreamUrl(sessionId: string): string {
+  return `${API_URL}/chat/sessions/${sessionId}/title-stream`;
 }
 
 export async function getLatestAnalysis(

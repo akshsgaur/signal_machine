@@ -237,6 +237,12 @@ async def touch_chat_session(session_id: str) -> None:
     ).eq("id", session_id).execute()
 
 
+async def update_chat_session_title(session_id: str, title: str) -> None:
+    """Update the title for a chat session."""
+    client = _get_client()
+    client.table("chat_sessions").update({"title": title}).eq("id", session_id).execute()
+
+
 async def list_chat_sessions(user_id: str, limit: int = 20) -> list[dict]:
     """Return recent chat sessions for a user."""
     client = _get_client()

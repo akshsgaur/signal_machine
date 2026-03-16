@@ -20,6 +20,7 @@ import {
   getIntegrations,
   getLinearDashboard,
   getLatestAnalysis,
+  getChatTitleStreamUrl,
   getCodeSessionUrl,
   getStreamUrl,
   listChatMessages,
@@ -27,6 +28,7 @@ import {
   listCustomerDocs,
   listInsightsFolders,
   sendChat,
+  startChatSession,
   startRun,
   uploadCustomerDocs,
   type LinearDashboardResponse,
@@ -144,6 +146,13 @@ function WidgetError({ label }: { label: string }) {
   return <div className="text-sm text-red-400">{label}</div>;
 }
 
+function getRenderedChatTitle(
+  session: ChatSession,
+  streamingTitles: Record<string, string>
+): string {
+  return streamingTitles[session.id] || session.title || "Untitled chat";
+}
+
 export default function WorkspacePage() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
@@ -156,6 +165,7 @@ export default function WorkspacePage() {
   const [chatError, setChatError] = useState("");
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [streamingChatTitles, setStreamingChatTitles] = useState<Record<string, string>>({});
   const [chatLoadingHistory, setChatLoadingHistory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarPeekOpen, setSidebarPeekOpen] = useState(false);
@@ -211,6 +221,7 @@ export default function WorkspacePage() {
   ]);
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
   const autoRunAttemptedRef = useRef(false);
+  const activeTitleStreamsRef = useRef<Map<string, EventSource>>(new Map());
   const sidebarResizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT_WIDTH });
   const overviewRef = useRef<HTMLDivElement | null>(null);
   const connectedToolsRef = useRef<HTMLDivElement | null>(null);
@@ -339,21 +350,25 @@ export default function WorkspacePage() {
   }, [isLoaded, user]);
 
   useEffect(() => {
-    let mounted = true;
-    async function loadSessions() {
-      if (!user) return;
-      try {
-        const sessions = await listChatSessions(user.id);
-        if (mounted) setChatSessions(sessions);
-      } catch {
-        if (mounted) setChatSessions([]);
-      }
-    }
-    loadSessions();
     return () => {
-      mounted = false;
+      activeTitleStreamsRef.current.forEach((source) => source.close());
+      activeTitleStreamsRef.current.clear();
     };
+  }, []);
+
+  const refreshChatSessions = useCallback(async () => {
+    if (!user) return;
+    try {
+      const sessions = await listChatSessions(user.id);
+      setChatSessions(sessions);
+    } catch {
+      setChatSessions([]);
+    }
   }, [user]);
+
+  useEffect(() => {
+    refreshChatSessions();
+  }, [refreshChatSessions]);
 
   const refreshAnalysis = useCallback(async () => {
     if (!user) return;
@@ -551,6 +566,61 @@ export default function WorkspacePage() {
     }
   }, []);
 
+  const startTitleStream = useCallback(
+    (sessionId: string) => {
+      const existing = activeTitleStreamsRef.current.get(sessionId);
+      if (existing) {
+        existing.close();
+      }
+
+      const es = new EventSource(getChatTitleStreamUrl(sessionId));
+      activeTitleStreamsRef.current.set(sessionId, es);
+
+      es.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data) as
+            | { type: "title_start"; session_id: string }
+            | { type: "title_delta"; session_id: string; content: string }
+            | { type: "title_complete"; session_id: string; title: string }
+            | { type: "title_error"; session_id: string };
+
+          if (message.type === "title_delta") {
+            setStreamingChatTitles((current) => ({
+              ...current,
+              [sessionId]: message.content,
+            }));
+            return;
+          }
+
+          if (message.type === "title_complete") {
+            setStreamingChatTitles((current) => ({
+              ...current,
+              [sessionId]: message.title,
+            }));
+            es.close();
+            activeTitleStreamsRef.current.delete(sessionId);
+            void refreshChatSessions();
+            return;
+          }
+
+          if (message.type === "title_error") {
+            es.close();
+            activeTitleStreamsRef.current.delete(sessionId);
+          }
+        } catch {
+          es.close();
+          activeTitleStreamsRef.current.delete(sessionId);
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+        activeTitleStreamsRef.current.delete(sessionId);
+      };
+    },
+    [refreshChatSessions]
+  );
+
   async function sendMessage() {
     const content = chatInput.trim();
     if (!content) return;
@@ -568,6 +638,26 @@ export default function WorkspacePage() {
       if (!user) {
         throw new Error("Please sign in to chat.");
       }
+      let activeSessionId = chatSessionId;
+      if (!activeSessionId) {
+        const session = await startChatSession(user.id, content, "Product chat");
+        const newSessionId = session.session_id;
+        activeSessionId = newSessionId;
+        setChatSessionId(newSessionId);
+        setChatSessions((prev) => [
+          {
+            id: newSessionId,
+            title: session.title,
+            updated_at: new Date().toISOString(),
+          },
+          ...prev.filter((existing) => existing.id !== newSessionId),
+        ]);
+        setStreamingChatTitles((current) => ({
+          ...current,
+          [newSessionId]: session.title,
+        }));
+        startTitleStream(newSessionId);
+      }
       const payload = chatMessages
         .filter((msg) => msg.role === "user" || msg.role === "assistant")
         .map((msg) => ({ role: msg.role, content: msg.content }))
@@ -575,8 +665,8 @@ export default function WorkspacePage() {
       const response = await sendChat(
         user.id,
         payload,
-        chatSessionId ?? undefined,
-        chatSessionId ? undefined : "Product chat",
+        activeSessionId ?? undefined,
+        undefined,
         activeFolder ?? undefined
       );
       const assistantMsg: ChatMessage = {
@@ -585,12 +675,9 @@ export default function WorkspacePage() {
         content: response.message,
         sources: response.sources_used,
       };
-      if (!chatSessionId) {
-        setChatSessionId(response.session_id);
-      }
+      setChatSessionId(response.session_id);
       setChatMessages((prev) => [...prev, assistantMsg]);
-      const sessions = await listChatSessions(user.id);
-      setChatSessions(sessions);
+      await refreshChatSessions();
     } catch (err: unknown) {
       setChatError(err instanceof Error ? err.message : "Chat failed");
     } finally {
@@ -762,7 +849,7 @@ export default function WorkspacePage() {
             { key: "new-chat", label: "New chat", action: "new-chat" },
             ...chatSessions.map((session) => ({
               key: session.id,
-              label: session.title ?? "Untitled chat",
+              label: getRenderedChatTitle(session, streamingChatTitles),
               action: "open-chat-session" as SidebarAction,
               payload: session.id,
               active: session.id === chatSessionId,
@@ -1522,7 +1609,7 @@ export default function WorkspacePage() {
                             : "bg-zinc-950 text-zinc-300 hover:text-white hover:bg-zinc-800"
                         }`}
                       >
-                        {session.title ?? "Untitled chat"}
+                        {getRenderedChatTitle(session, streamingChatTitles)}
                       </button>
                     ))}
                   </div>
