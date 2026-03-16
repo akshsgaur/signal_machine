@@ -157,79 +157,48 @@ function WidgetError({ label }: { label: string }) {
 
 function ThinkingAnimation() {
   return (
-    <div className="inline-flex items-center gap-3 rounded-full border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-300">
-      <span className="font-medium text-zinc-200">Thinking</span>
-      <span className="thinking-shimmer h-2 w-20 rounded-full bg-zinc-800" />
+    <div className="inline-flex items-center gap-2 px-1 py-1 text-xs text-zinc-500">
+      <span className="font-medium tracking-[0.01em]">Thinking</span>
+      <span className="thinking-shimmer h-[5px] w-16 rounded-full bg-zinc-800/80" />
     </div>
-  );
-}
-
-function ActivitySummaryPill({
-  label,
-  expanded,
-  onToggle,
-}: {
-  label: string;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
-    >
-      <span>{label}</span>
-      <span className={`transition-transform ${expanded ? "rotate-90" : ""}`}>›</span>
-    </button>
   );
 }
 
 function ChatActivityFeed({
   message,
-  onToggle,
 }: {
   message: ChatMessage;
-  onToggle: () => void;
 }) {
   const steps = message.activitySteps ?? [];
-  const showThinking = message.isStreaming && steps.length === 0;
-  const showExpanded = (message.isStreaming && steps.length > 0) || message.showActivityDetails;
+  if (!message.isStreaming) {
+    return null;
+  }
+
+  const showThinking = steps.length === 0;
 
   return (
-    <div className="mb-3 space-y-3">
+    <div className="mb-2 min-h-6">
       {showThinking && <ThinkingAnimation />}
-
-      {message.activitySummary && (
-        <ActivitySummaryPill
-          label={message.activitySummary}
-          expanded={!!message.showActivityDetails}
-          onToggle={onToggle}
-        />
-      )}
-
-      {showExpanded && steps.length > 0 && (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-3">
-          <div className="space-y-2">
-            {steps.map((step, index) => (
-              <div
-                key={step.id}
-                className={`activity-step flex items-center gap-3 rounded-xl px-2 py-1.5 text-sm transition-all ${
-                  step.status === "active" ? "text-zinc-100" : "text-zinc-400"
+      {!showThinking && (
+        <div className="space-y-1">
+          {steps.map((step, index) => (
+            <div
+              key={step.id}
+              className={`activity-step flex items-center gap-2 px-1 py-1 text-sm transition-all ${
+                step.status === "active" ? "text-zinc-400" : "text-zinc-600"
+              }`}
+              style={{ animationDelay: `${index * 70}ms` }}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  step.status === "active" ? "bg-zinc-500" : "bg-zinc-700"
                 }`}
-                style={{ animationDelay: `${index * 80}ms` }}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    step.status === "active" ? "bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.55)]" : "bg-zinc-600"
-                  }`}
-                />
-                <span className={step.status === "active" ? "font-medium" : ""}>
-                  {step.label}
-                </span>
-              </div>
-            ))}
-          </div>
+              />
+              <span className={step.status === "active" ? "activity-current" : ""}>
+                {step.label}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -837,7 +806,7 @@ export default function WorkspacePage() {
             if (event.type === "activity_complete") {
               updateAssistantPlaceholder(assistantPlaceholderId, (message) => ({
                 ...message,
-                activitySummary: event.summary,
+                activitySummary: undefined,
                 showActivityDetails: false,
               }));
               return;
@@ -859,7 +828,9 @@ export default function WorkspacePage() {
                 ...message,
                 isStreaming: false,
                 status: message.status === "error" ? "error" : "complete",
-                activitySummary: message.activitySummary ?? "Thought through the request",
+                activitySummary: undefined,
+                activitySteps: [],
+                showActivityDetails: false,
               }));
               void refreshChatSessions();
               return;
@@ -871,7 +842,8 @@ export default function WorkspacePage() {
                 status: "error",
                 isStreaming: false,
                 content: message.content || "The chat request failed. Please try again.",
-                activitySummary: "Request interrupted",
+                activitySummary: undefined,
+                activitySteps: [],
               }));
               setChatError(event.message);
             }
@@ -887,7 +859,8 @@ export default function WorkspacePage() {
                 status: "error",
                 isStreaming: false,
                 content: "The chat request failed. Please try again.",
-                activitySummary: "Request interrupted",
+                activitySummary: undefined,
+                activitySteps: [],
               }
             : message
         )
@@ -1850,22 +1823,8 @@ export default function WorkspacePage() {
                     >
                       {msg.role === "assistant" ? (
                         <div>
-                          {(msg.isStreaming || msg.activitySummary || (msg.activitySteps?.length ?? 0) > 0) && (
-                            <ChatActivityFeed
-                              message={msg}
-                              onToggle={() =>
-                                setChatMessages((prev) =>
-                                  prev.map((message) =>
-                                    message.id === msg.id
-                                      ? {
-                                          ...message,
-                                          showActivityDetails: !message.showActivityDetails,
-                                        }
-                                      : message
-                                  )
-                                )
-                              }
-                            />
+                          {msg.isStreaming && (
+                            <ChatActivityFeed message={msg} />
                           )}
                           {msg.content && (
                             <div className="prose prose-invert prose-sm max-w-none">

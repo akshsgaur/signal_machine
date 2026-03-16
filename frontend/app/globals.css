@@ -74,9 +74,28 @@ body {
   animation: activity-step-in 0.2s ease-out both;
 }
 
+.activity-current {
+  background: linear-gradient(
+    90deg,
+    rgba(161, 161, 170, 0.45) 0%,
+    rgba(244, 244, 245, 0.85) 50%,
+    rgba(161, 161, 170, 0.45) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 1.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .thinking-shimmer::after,
-  .activity-step {
+  .activity-step,
+  .activity-current {
     animation: none;
+  }
+
+  .activity-current {
+    color: inherit;
+    background: none;
   }
 }
