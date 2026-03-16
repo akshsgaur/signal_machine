@@ -271,13 +271,7 @@ export default function WorkspacePage() {
   const [linearDashboard, setLinearDashboard] = useState<LinearDashboardResponse | null>(null);
   const [linearDashboardLoading, setLinearDashboardLoading] = useState(false);
   const [linearDashboardError, setLinearDashboardError] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Ask me anything about your product. I can summarize trends and signals.",
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
   const autoRunAttemptedRef = useRef(false);
   const activeTitleStreamsRef = useRef<Map<string, EventSource>>(new Map());
@@ -895,13 +889,7 @@ export default function WorkspacePage() {
 
   function startNewChat() {
     setChatSessionId(null);
-    setChatMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        content: "Ask me anything about your product. I can summarize trends and signals.",
-      },
-    ]);
+    setChatMessages([]);
   }
 
 
