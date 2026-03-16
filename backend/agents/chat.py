@@ -10,15 +10,9 @@ from langchain_core.tools import tool
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from db.supabase import get_all_tokens, get_slack_tokens, query_slack_messages
-from integrations.connections import (
-    build_amplitude_client,
-    build_atlassian_client,
-    build_linear_client,
-    build_productboard_client,
-    build_zendesk_client,
-    get_tools_for_client,
-)
+from db.supabase import get_all_integration_credentials, get_all_tokens, get_slack_tokens, query_slack_messages
+from integrations.connections import create_mcp_client, get_tools_for_client
+from integrations.registry import is_provider_connectable, list_chat_providers
 
 CHAT_SYSTEM_PROMPT = """You are Signal, a product intelligence assistant.
 
@@ -383,46 +377,30 @@ async def build_chat_tools(
     folder_name: str | None = None,
 ) -> Tuple[List[object], Dict[str, str], List[str]]:
     """Build MCP tools from connected integrations and map tool->source."""
+    credentials_by_provider = await get_all_integration_credentials(user_id)
     tokens = await get_all_tokens(user_id)
-
-    clients = []
-    connected_sources: List[str] = []
-    if "amplitude" in tokens:
-        clients.append(("Amplitude", build_amplitude_client(tokens["amplitude"])))
-        connected_sources.append("Amplitude")
-    if "zendesk" in tokens:
-        clients.append(("Zendesk", build_zendesk_client(tokens["zendesk"])))
-        connected_sources.append("Zendesk")
-    if "productboard" in tokens:
-        clients.append(("Productboard", build_productboard_client(tokens["productboard"])))
-        connected_sources.append("Productboard")
-    if "linear" in tokens:
-        clients.append(("Linear", build_linear_client(tokens["linear"])))
-        connected_sources.append("Linear")
 
     tools: List[object] = []
     tool_to_source: Dict[str, str] = {}
+    connected_sources: List[str] = []
 
-    for source, client in clients:
-        mcp_tools = await client.get_tools()
+    for provider in list_chat_providers():
+        credentials = credentials_by_provider.get(provider.id)
+        if not credentials or not is_provider_connectable(provider):
+            continue
+        client = create_mcp_client(provider.id, credentials)
+        if client is None:
+            continue
+        mcp_tools = await get_tools_for_client(client)
         for tool in mcp_tools:
             tool_name = getattr(tool, "name", None)
             if not tool_name:
                 continue
             tool.handle_tool_error = True
             tools.append(tool)
-            tool_to_source[tool_name] = source
-
-    if "atlassian" in tokens:
-        atlassian_client = build_atlassian_client(tokens["atlassian"])
-        atlassian_tools = await get_tools_for_client(atlassian_client)
-        for t in atlassian_tools:
-            t.handle_tool_error = True
-            tool_name = getattr(t, "name", None)
-            if tool_name:
-                tool_to_source[tool_name] = "Jira/Confluence"
-        tools.extend(atlassian_tools)
-        connected_sources.append("Jira/Confluence")
+            tool_to_source[tool_name] = provider.label
+        if mcp_tools:
+            connected_sources.append(provider.label)
 
     if MORPHIK_API_KEY:
         folder_tool = build_morphik_folder_tool(user_id)

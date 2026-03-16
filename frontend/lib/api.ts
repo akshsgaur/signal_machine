@@ -1,5 +1,44 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export type IntegrationCredentialField = {
+  name: string;
+  label: string;
+  kind: "text" | "password" | "url";
+  placeholder: string;
+  required: boolean;
+};
+
+export type IntegrationProvider = {
+  id: string;
+  label: string;
+  category: string;
+  description: string;
+  status: "supported" | "blocked" | "existing_non_mcp";
+  surfaces: string[];
+  auth_mode: "token" | "json_credentials" | "oauth_future" | "oauth";
+  transport: "streamable_http" | "stdio" | "custom";
+  credential_schema: IntegrationCredentialField[];
+  logo_path?: string | null;
+  reason_unavailable?: string | null;
+  chat_enabled: boolean;
+  pipeline_enabled: boolean;
+  builder_key?: string | null;
+  connectable: boolean;
+};
+
+export type IntegrationCatalogGroup = {
+  category: string;
+  providers: IntegrationProvider[];
+};
+
+export type IntegrationStatus = {
+  connected: boolean;
+  status: string;
+  label?: string;
+  connectable?: boolean;
+  pipeline_enabled?: boolean;
+};
+
 export type LinearDashboardResponse = {
   connected: boolean;
   refreshed_at: string;
@@ -75,23 +114,39 @@ export type LinearDashboardResponse = {
 export async function connectIntegration(
   userId: string,
   integrationType: string,
-  token: string
+  credentials: string | Record<string, string>
 ): Promise<void> {
+  const body =
+    typeof credentials === "string"
+      ? {
+          user_id: userId,
+          integration_type: integrationType,
+          token: credentials,
+        }
+      : {
+          user_id: userId,
+          integration_type: integrationType,
+          credentials,
+        };
   const res = await fetch(`${API_URL}/integrations/connect`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user_id: userId,
-      integration_type: integrationType,
-      token,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await res.text());
 }
 
+export async function getIntegrationCatalog(): Promise<{
+  groups: IntegrationCatalogGroup[];
+}> {
+  const res = await fetch(`${API_URL}/integrations/catalog`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function getIntegrations(
   userId: string
-): Promise<Record<string, boolean>> {
+): Promise<Record<string, IntegrationStatus>> {
   const res = await fetch(`${API_URL}/integrations/${userId}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();

@@ -30,7 +30,7 @@ from agents.prompts import (
     SYNTHESIS_AGENT_PROMPT,
 )
 from agents.state import DeepAgentState
-from db.supabase import get_all_tokens, update_pipeline_brief
+from db.supabase import get_all_integration_credentials, get_all_tokens, update_pipeline_brief
 from integrations.connections import (
     build_amplitude_client,
     build_atlassian_client,
@@ -234,6 +234,7 @@ async def run_signal_pipeline(
     """
     try:
         # 1. Fetch all tokens from Supabase
+        credentials = await get_all_integration_credentials(user_id)
         tokens = await get_all_tokens(user_id)
 
         # 2. Shared model + base tools — use user-configured key/model if set
@@ -249,27 +250,27 @@ async def run_signal_pipeline(
 
         research_config: dict[str, tuple[Callable | None, str]] = {
             "behavioral": (
-                _builder(build_amplitude_client, tokens["amplitude"]) if "amplitude" in tokens else None,
+                _builder(build_amplitude_client, credentials["amplitude"]) if "amplitude" in credentials else None,
                 BEHAVIORAL_AGENT_PROMPT.format(**fmt),
             ),
             "support": (
-                _builder(build_zendesk_client, tokens["zendesk"]) if "zendesk" in tokens else None,
+                _builder(build_zendesk_client, credentials["zendesk"]) if "zendesk" in credentials else None,
                 SUPPORT_AGENT_PROMPT.format(**fmt),
             ),
             "feature": (
-                _builder(build_productboard_client, tokens["productboard"]) if "productboard" in tokens else None,
+                _builder(build_productboard_client, credentials["productboard"]) if "productboard" in credentials else None,
                 FEATURE_AGENT_PROMPT.format(**fmt),
             ),
             "execution": (
-                _builder(build_linear_client, tokens["linear"]) if "linear" in tokens else None,
+                _builder(build_linear_client, credentials["linear"]) if "linear" in credentials else None,
                 EXECUTION_AGENT_PROMPT.format(**fmt),
             ),
             "jira": (
-                _builder(build_atlassian_client, tokens["atlassian"]) if "atlassian" in tokens else None,
+                _builder(build_atlassian_client, credentials["atlassian"]) if "atlassian" in credentials else None,
                 JIRA_AGENT_PROMPT.format(**fmt),
             ),
             "confluence": (
-                _builder(build_atlassian_client, tokens["atlassian"]) if "atlassian" in tokens else None,
+                _builder(build_atlassian_client, credentials["atlassian"]) if "atlassian" in credentials else None,
                 CONFLUENCE_AGENT_PROMPT.format(**fmt),
             ),
         }

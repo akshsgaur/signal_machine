@@ -1,46 +1,73 @@
 "use client";
 
 import { useState } from "react";
-import { connectIntegration } from "@/lib/api";
+import {
+  connectIntegration,
+  type IntegrationProvider,
+  type IntegrationStatus,
+} from "@/lib/api";
 
 interface Props {
-  name: string;
-  label: string;
-  description: string;
+  provider: IntegrationProvider;
   userId: string;
-  connected: boolean;
+  state?: IntegrationStatus;
   onConnected: () => void;
-  logo?: string;
   connectHref?: string;
   secondaryConnectHref?: string;
   secondaryLabel?: string;
   note?: string;
 }
 
+function badgeLabel(provider: IntegrationProvider, state?: IntegrationStatus): string {
+  if (state?.connected) return "Connected";
+  if (provider.status === "blocked") return "Blocked";
+  if (provider.auth_mode === "oauth_future") return "Planned";
+  if (provider.status === "existing_non_mcp") return "Available";
+  if (provider.connectable) return "Available";
+  return "Planned";
+}
+
+function badgeClasses(label: string): string {
+  if (label === "Connected") return "text-emerald-400";
+  if (label === "Blocked") return "text-red-400";
+  return "text-amber-300";
+}
+
 export function IntegrationCard({
-  name,
-  label,
-  description,
+  provider,
   userId,
-  connected,
+  state,
   onConnected,
-  logo,
   connectHref,
   secondaryConnectHref,
   secondaryLabel,
   note,
 }: Props) {
-  const [token, setToken] = useState("");
+  const [form, setForm] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const connected = !!state?.connected;
+  const disabled =
+    connected ||
+    provider.status !== "supported" ||
+    !provider.connectable ||
+    provider.auth_mode === "oauth_future";
+  const badge = badgeLabel(provider, state);
+  const fieldCount = provider.credential_schema.length;
+
   async function handleConnect() {
-    if (!token.trim()) return;
+    if (!userId) return;
     setLoading(true);
     setError("");
     try {
-      await connectIntegration(userId, name, token.trim());
-      setToken("");
+      if (provider.auth_mode === "token" && fieldCount === 1) {
+        const field = provider.credential_schema[0];
+        await connectIntegration(userId, provider.id, form[field.name] ?? "");
+      } else {
+        await connectIntegration(userId, provider.id, form);
+      }
+      setForm({});
       onConnected();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Connection failed");
@@ -49,74 +76,118 @@ export function IntegrationCard({
     }
   }
 
+  const requiredMissing = provider.credential_schema.some(
+    (field) => field.required && !(form[field.name] ?? "").trim()
+  );
+
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          {logo && (
+          {provider.logo_path && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={logo}
-              alt={`${label} logo`}
+              src={provider.logo_path}
+              alt={`${provider.label} logo`}
               className="w-8 h-8 rounded-md object-contain"
             />
           )}
           <div>
-            <h3 className="text-white font-semibold text-lg">{label}</h3>
-            <p className="text-zinc-400 text-sm mt-0.5">{description}</p>
+            <h3 className="text-white font-semibold text-lg">{provider.label}</h3>
+            <p className="text-zinc-400 text-sm mt-0.5">{provider.description}</p>
           </div>
         </div>
-        {connected && (
-          <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Connected
-          </span>
-        )}
+        <span className={`flex items-center gap-1.5 text-sm font-medium ${badgeClasses(badge)}`}>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              badge === "Connected"
+                ? "bg-emerald-400"
+                : badge === "Blocked"
+                  ? "bg-red-400"
+                  : "bg-amber-300"
+            }`}
+          />
+          {badge}
+        </span>
       </div>
 
-      {!connected && (
+      {connectHref && !connected && (
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={connectHref}
+            className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors"
+          >
+            Connect
+          </a>
+          {secondaryConnectHref && (
+            <a
+              href={secondaryConnectHref}
+              className="px-4 py-2 border border-zinc-700 text-zinc-200 text-sm font-medium rounded-lg hover:border-zinc-500 transition-colors"
+            >
+              {secondaryLabel ?? "Enable private access"}
+            </a>
+          )}
+        </div>
+      )}
+
+      {!connectHref && !disabled && (
         <>
-          {connectHref ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <a
-                href={connectHref}
-                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors"
-              >
-                Connect
-              </a>
-              {secondaryConnectHref && (
-                <a
-                  href={secondaryConnectHref}
-                  className="px-4 py-2 border border-zinc-700 text-zinc-200 text-sm font-medium rounded-lg hover:border-zinc-500 transition-colors"
-                >
-                  {secondaryLabel ?? "Enable private access"}
-                </a>
-              )}
-            </div>
-          ) : (
+          {provider.auth_mode === "token" && fieldCount === 1 ? (
             <div className="flex gap-2">
               <input
                 type="password"
-                placeholder={`Paste ${label} API token`}
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
+                placeholder={provider.credential_schema[0]?.placeholder ?? `Paste ${provider.label} token`}
+                value={form[provider.credential_schema[0]?.name ?? "token"] ?? ""}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    [provider.credential_schema[0]?.name ?? "token"]: e.target.value,
+                  }))
+                }
                 className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
-                onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+                onKeyDown={(e) => e.key === "Enter" && !requiredMissing && handleConnect()}
               />
               <button
                 onClick={handleConnect}
-                disabled={loading || !token.trim()}
+                disabled={loading || requiredMissing}
                 className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {loading ? "Connecting..." : "Connect"}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {provider.credential_schema.map((field) => (
+                <input
+                  key={field.name}
+                  type={field.kind === "password" ? "password" : "text"}
+                  placeholder={field.placeholder}
+                  value={form[field.name] ?? ""}
+                  onChange={(e) =>
+                    setForm((current) => ({ ...current, [field.name]: e.target.value }))
+                  }
+                  onKeyDown={(e) => e.key === "Enter" && !requiredMissing && handleConnect()}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                />
+              ))}
+              <button
+                onClick={handleConnect}
+                disabled={loading || requiredMissing}
+                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? "Saving..." : "Save"}
               </button>
             </div>
           )}
         </>
       )}
 
+      {(provider.reason_unavailable || note) && (
+        <p className="text-zinc-500 text-xs">
+          {provider.reason_unavailable ?? note}
+        </p>
+      )}
       {error && <p className="text-red-400 text-sm">{error}</p>}
-      {note && <p className="text-zinc-500 text-xs">{note}</p>}
     </div>
   );
 }

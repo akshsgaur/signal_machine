@@ -2,9 +2,12 @@
 
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from dotenv import load_dotenv
 from supabase import create_client, Client
+
+from integrations.registry import coerce_credentials
 
 load_dotenv()
 
@@ -20,18 +23,43 @@ def _get_client() -> Client:
     return _client
 
 
-async def store_integration_token(user_id: str, integration_type: str, token: str) -> None:
-    """Upsert an OAuth/API token for a user integration."""
+async def store_integration_credentials(
+    user_id: str,
+    integration_type: str,
+    credentials: dict[str, Any],
+    oauth_token: str | None = None,
+) -> None:
+    """Upsert structured credentials for a user integration."""
     client = _get_client()
+    token_value = oauth_token
+    if token_value is None:
+        simple_secret_keys = ("token", "api_key", "api_token", "pat_secret", "value")
+        for key in simple_secret_keys:
+            value = credentials.get(key)
+            if isinstance(value, str) and value.strip():
+                token_value = value.strip()
+                break
     client.table("user_integrations").upsert(
         {
             "user_id": user_id,
             "integration_type": integration_type,
-            "oauth_token": token,
+            "oauth_token": token_value,
+            "credentials_json": credentials,
             "connected_at": datetime.now(timezone.utc).isoformat(),
         },
         on_conflict="user_id,integration_type",
     ).execute()
+
+
+async def store_integration_token(user_id: str, integration_type: str, token: str) -> None:
+    """Upsert a legacy token-only integration value."""
+    credentials = coerce_credentials(integration_type, token) or {"token": token}
+    await store_integration_credentials(
+        user_id,
+        integration_type,
+        credentials,
+        oauth_token=token,
+    )
 
 
 async def get_integration_token(user_id: str, integration_type: str) -> str | None:
@@ -50,6 +78,36 @@ async def get_integration_token(user_id: str, integration_type: str) -> str | No
     return None
 
 
+def _normalize_stored_credentials(
+    integration_type: str,
+    oauth_token: str | None,
+    credentials_json: Any,
+) -> dict[str, Any]:
+    if isinstance(credentials_json, dict):
+        return credentials_json
+    return coerce_credentials(integration_type, oauth_token) or {}
+
+
+async def get_all_integration_credentials(user_id: str) -> dict[str, dict[str, Any]]:
+    """Return all integration credentials for a user as {integration_type: credentials}."""
+    client = _get_client()
+    result = (
+        client.table("user_integrations")
+        .select("integration_type,oauth_token,credentials_json")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    data: dict[str, dict[str, Any]] = {}
+    for row in result.data or []:
+        integration_type = row["integration_type"]
+        data[integration_type] = _normalize_stored_credentials(
+            integration_type,
+            row.get("oauth_token"),
+            row.get("credentials_json"),
+        )
+    return data
+
+
 async def get_all_tokens(user_id: str) -> dict[str, str]:
     """Return all integration tokens for a user as {integration_type: token}."""
     client = _get_client()
@@ -59,7 +117,11 @@ async def get_all_tokens(user_id: str) -> dict[str, str]:
         .eq("user_id", user_id)
         .execute()
     )
-    return {row["integration_type"]: row["oauth_token"] for row in (result.data or [])}
+    return {
+        row["integration_type"]: row["oauth_token"]
+        for row in (result.data or [])
+        if row.get("oauth_token")
+    }
 
 
 async def get_slack_tokens(user_id: str) -> list[dict]:

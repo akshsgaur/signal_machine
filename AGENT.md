@@ -7,9 +7,9 @@ working on the Signal codebase. Read this before touching any file.
 
 ## What Signal Does
 
-Signal validates PM hypotheses by pulling live data from 4 SaaS tools via MCP, running 4 parallel
-research agents, then synthesizing a structured decision brief with a 5th agent. The output is a
-markdown brief that tells a PM whether to pursue, deprioritize, or investigate their hypothesis.
+Signal validates PM hypotheses by pulling live data from the pipeline integrations via MCP, running
+parallel research agents, then synthesizing a structured decision brief. Separately, the chat
+surface can load a broader MCP-backed integration catalog than the pipeline itself.
 
 **Entry point for a run:** `POST /run` → background task → `run_signal_pipeline()` → SSE stream
 
@@ -49,11 +49,12 @@ signal/
 │   │   ├── subagents.py               ← create_subagent_agents() factory
 │   │   └── pipeline.py               ← run_signal_pipeline(), _run_agent(), AGENT_FILE_MAP
 │   ├── integrations/
-│   │   └── connections.py             ← build_*_client(), get_tools_for_client()
+│   │   ├── connections.py             ← build_*_client(), create_mcp_client(), get_tools_for_client()
+│   │   └── registry.py                ← backend-owned integration catalog + validation
 │   ├── db/
-│   │   └── supabase.py                ← token CRUD, pipeline run CRUD
+│   │   └── supabase.py                ← credential CRUD, pipeline run CRUD
 │   ├── routers/
-│   │   ├── integrations.py            ← POST /integrations/connect, GET /integrations/{user_id}
+│   │   ├── integrations.py            ← GET /integrations/catalog, POST /integrations/connect, GET /integrations/{user_id}
 │   │   └── pipeline.py               ← POST /run, GET /run/{run_id}/stream (SSE)
 │   └── scripts/
 │       ├── test_db.py                 ← smoke test Supabase layer
@@ -63,13 +64,13 @@ signal/
     ├── app/
     │   ├── layout.tsx                 ← Inter font, bg-[#0A0A0A], global styles
     │   ├── page.tsx                   ← Screen 2: HypothesisForm
-    │   ├── connect/page.tsx           ← Screen 1: IntegrationCard × 4
+    │   ├── connect/page.tsx           ← Screen 1: backend-driven integration catalog
     │   └── run/[id]/page.tsx          ← Screen 3: PipelineTracker + DecisionBrief
     ├── components/
     │   ├── HypothesisForm.tsx         ← textarea + product area + submit → POST /run
     │   ├── PipelineTracker.tsx        ← 5 rows (4 agents + synthesis), spinner → checkmark
     │   ├── DecisionBrief.tsx          ← react-markdown + skeleton while loading
-    │   └── IntegrationCard.tsx        ← token input + Connect button, green check when done
+    │   └── IntegrationCard.tsx        ← generic integration card for token/json/oauth states
     └── lib/
         ├── api.ts                     ← startRun(), connectIntegration(), getIntegrations()
         ├── supabase.ts                ← supabase client (anon key, browser-safe)
@@ -114,7 +115,7 @@ Path traversal is blocked by `_safe_path()` — paths must stay inside `storage/
 ```
 run_signal_pipeline(run_id, user_id, hypothesis, product_area)
   │
-  ├── 1. get_all_tokens(user_id)                     # Supabase → {integration: token}
+  ├── 1. get_all_integration_credentials(user_id)    # Supabase → {integration: credentials}
   ├── 2. asyncio.gather(get_tools_for_client × 4)    # MCP tool discovery, return_exceptions=True
   ├── 3. init_chat_model("gpt-4o-mini")
   │
@@ -166,6 +167,16 @@ plan its next step. Do not remove it from the base tool list.
 ---
 
 ## MCP Connections (`backend/mcp/connections.py`)
+
+The integration catalog lives in `backend/integrations/registry.py`. It is the source of truth for:
+
+- provider metadata shown on the connect page
+- credential schema and validation
+- whether a provider is chat-enabled or pipeline-enabled
+- whether the current deployment is connectable for a stdio-backed server
+
+New chat-capable providers added in the current implementation: `Aha!`, `monday.com`, and `Tableau`.
+Deferred catalog-only entries: `Notion`, `Miro`, `Figma`, `Gong`, `SurveyMonkey`, `Loom`, `Gartner`.
 
 MCP clients are **created per pipeline run** inside `run_signal_pipeline`. They are never
 instantiated at module import time because tokens are only available at runtime.

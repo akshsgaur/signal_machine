@@ -30,6 +30,7 @@ import {
   startRun,
   uploadCustomerDocs,
   type LinearDashboardResponse,
+  type IntegrationStatus,
 } from "@/lib/api";
 
 type TabKey = "analysis" | "chat" | "insights" | "builder" | "profile";
@@ -148,7 +149,7 @@ export default function WorkspacePage() {
   const { signOut } = useClerk();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("analysis");
-  const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [connected, setConnected] = useState<Record<string, IntegrationStatus>>({});
   const [loadingIntegrations, setLoadingIntegrations] = useState(true);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
@@ -371,7 +372,7 @@ export default function WorkspacePage() {
 
   const refreshLinearDashboard = useCallback(async () => {
     if (!user) return;
-    if (!connected.linear) {
+    if (!connected.linear?.connected) {
       setLinearDashboard(null);
       setLinearDashboardError("");
       setLinearDashboardLoading(false);
@@ -390,7 +391,7 @@ export default function WorkspacePage() {
     } finally {
       setLinearDashboardLoading(false);
     }
-  }, [connected.linear, user]);
+  }, [connected.linear?.connected, user]);
 
   const refreshDashboardData = useCallback(async () => {
     await Promise.all([refreshAnalysis(), refreshLinearDashboard()]);
@@ -437,7 +438,10 @@ export default function WorkspacePage() {
   }, [user, agentRunning, refreshAnalysis]);
 
   const connectedIntegrations = useMemo(
-    () => Object.keys(connected).filter((key) => connected[key]),
+    () =>
+      Object.keys(connected).filter(
+        (key) => connected[key]?.connected && connected[key]?.pipeline_enabled
+      ),
     [connected]
   );
   const hasSourceAnalysis = useMemo(
@@ -445,9 +449,9 @@ export default function WorkspacePage() {
     [analysisData]
   );
   const linearWidgets = linearDashboard?.widgets;
-  const showLinearWidgets = !!connected.linear && !!linearWidgets;
+  const showLinearWidgets = !!connected.linear?.connected && !!linearWidgets;
   const showLinearWidgetNotice =
-    !!connected.linear &&
+    !!connected.linear?.connected &&
     !linearDashboardLoading &&
     !showLinearWidgets &&
     !linearDashboardError;
@@ -458,14 +462,14 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (loadingIntegrations) return;
-    if (!connected.linear) {
+    if (!connected.linear?.connected) {
       setLinearDashboard(null);
       setLinearDashboardError("");
       setLinearDashboardLoading(false);
       return;
     }
     refreshLinearDashboard();
-  }, [connected.linear, loadingIntegrations, refreshLinearDashboard]);
+  }, [connected.linear?.connected, loadingIntegrations, refreshLinearDashboard]);
 
   useEffect(() => {
     if (!user || loadingIntegrations) return;
@@ -1100,7 +1104,7 @@ export default function WorkspacePage() {
                       { key: "feature", label: "Productboard", integration: "productboard" },
                       { key: "execution", label: "Linear", integration: "linear" },
                       { key: "insights", label: "Customer Insights", integration: null },
-                    ].filter(({ integration }) => integration === null || connected[integration])
+                    ].filter(({ integration }) => integration === null || connected[integration]?.connected)
                     .map(({ key, label }) => (
                       <span
                         key={key}
@@ -1125,7 +1129,7 @@ export default function WorkspacePage() {
                   <div className="mb-3 text-sm text-red-400">{analysisError}</div>
                 )}
 
-                {connected.linear && linearDashboardError && !showLinearWidgets && (
+                {connected.linear?.connected && linearDashboardError && !showLinearWidgets && (
                   <div className="rounded-2xl border border-zinc-800 bg-black p-4 text-sm text-red-400">
                     {linearDashboardError}
                   </div>
@@ -1146,7 +1150,7 @@ export default function WorkspacePage() {
 
                 {!agentRunning && <div ref={runStatusRef} />}
 
-                {connected.linear && linearDashboardLoading && !showLinearWidgets && (
+                {connected.linear?.connected && linearDashboardLoading && !showLinearWidgets && (
                   <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                     {Array.from({ length: 6 }).map((_, index) => (
                       <div

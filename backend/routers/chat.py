@@ -86,8 +86,8 @@ async def chat(request: ChatRequest):
         if not connected_sources:
             return ChatResponse(
                 message=(
-                    "No integrations are connected yet. Connect Amplitude, Zendesk, "
-                    "Productboard, or Linear to ask questions across your data."
+                    "No chat-capable integrations are connected yet. Connect one of the "
+                    "available MCP-backed sources from the integrations page and try again."
                 ),
                 sources_used=[],
                 session_id=request.session_id or "",

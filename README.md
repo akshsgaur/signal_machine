@@ -62,6 +62,16 @@ The frontend streams agent completions via SSE so you watch the pipeline run in 
 
 Integrations are optional. If one is not connected, the agent writes a fallback note and the brief reflects reduced confidence for that source.
 
+### Chat Integrations Catalog
+
+The integrations page is backend-driven and groups providers by category. In this phase:
+
+- Fully wired for connect + chat: `Aha!`, `Amplitude`, `Atlassian Jira + Confluence`, `monday.com`, `Productboard`, `Tableau`, plus the existing `Slack` integration path.
+- Deferred as catalog-only entries: `Notion`, `Miro`, `Figma`.
+- Shown as blocked for this phase: `Gong`, `SurveyMonkey`, `Loom`, `Gartner`.
+
+The hypothesis-analysis pipeline remains limited to the existing pipeline sources; new providers are chat-first.
+
 ---
 
 ## Prerequisites
@@ -85,7 +95,8 @@ create table user_integrations (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
   integration_type text not null,
-  oauth_token text not null,
+  oauth_token text,
+  credentials_json jsonb,
   connected_at timestamptz default now(),
   last_used_at timestamptz,
   unique(user_id, integration_type)
@@ -126,9 +137,13 @@ SUPABASE_KEY=your-service-role-key
 OPENAI_API_KEY=sk-...
 # Optional:
 PRODUCTBOARD_SIDECAR_PATH=/path/to/productboard-mcp/index.js
+AHA_MCP_COMMAND=uvx mcp-aha
+MONDAY_MCP_COMMAND=uvx monday-mcp
+TABLEAU_MCP_COMMAND=uvx tableau-mcp
 ```
 
 > Use the **service role** key for `SUPABASE_KEY` (backend only, never exposed to the browser).
+> For stdio-backed providers you can set either `*_MCP_COMMAND` or `*_MCP_SERVER_PATH` depending on how the MCP server is installed.
 
 ### 3. Frontend
 
@@ -191,8 +206,9 @@ npm run dev
 | Method | Path | Body / Params | Response |
 |---|---|---|---|
 | `GET` | `/health` | — | `{"status": "ok"}` |
-| `POST` | `/integrations/connect` | `{user_id, integration_type, token}` | `{"status": "connected"}` |
-| `GET` | `/integrations/{user_id}` | — | `{"amplitude": true, ...}` |
+| `GET` | `/integrations/catalog` | — | grouped integration metadata for the connect page |
+| `POST` | `/integrations/connect` | `{user_id, integration_type, credentials}` or legacy `{token}` | `{"status": "connected"}` |
+| `GET` | `/integrations/{user_id}` | — | `{"amplitude": {"connected": true, ...}, ...}` |
 | `POST` | `/run` | `{user_id, hypothesis, product_area}` | `{"run_id": "<uuid>"}` |
 | `GET` | `/run/{run_id}/stream` | — | SSE stream |
 

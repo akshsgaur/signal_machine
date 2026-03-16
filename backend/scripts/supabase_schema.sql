@@ -11,8 +11,9 @@ $$ language plpgsql;
 create table if not exists user_integrations (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
-  integration_type text not null check (integration_type in ('amplitude','zendesk','productboard','linear')),
-  oauth_token text not null,
+  integration_type text not null,
+  oauth_token text,
+  credentials_json jsonb,
   connected_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, integration_type)

@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from db.supabase import (
+    get_all_integration_credentials,
     store_integration_token,
     get_integration_token,
     get_all_tokens,
@@ -33,16 +34,21 @@ async def main():
     assert "amplitude" in tokens
     print(f"   OK: {tokens}")
 
-    print("4. Creating pipeline run...")
+    print("4. Getting structured credentials...")
+    credentials = await get_all_integration_credentials(user_id)
+    assert credentials["amplitude"]["api_key"] == "test-amplitude-key"
+    print(f"   OK: {credentials}")
+
+    print("5. Creating pipeline run...")
     run_id = await create_pipeline_run(user_id, "Users who see feature X retain better", "Onboarding")
     print(f"   OK: run_id={run_id}")
 
-    print("5. Fetching run...")
+    print("6. Fetching run...")
     run = await get_pipeline_run(run_id)
     assert run["status"] == "running"
     print(f"   OK: status={run['status']}")
 
-    print("6. Updating brief...")
+    print("7. Updating brief...")
     await update_pipeline_brief(run_id, "# Decision Brief\n\nTest brief.", "complete")
     run = await get_pipeline_run(run_id)
     assert run["status"] == "complete"
