@@ -86,7 +86,9 @@ export default function ConnectPage() {
       catalog
         .map((group) => ({
           ...group,
-          providers: group.providers.filter((provider) => provider.id !== "slack"),
+          providers: group.providers.filter(
+            (provider) => provider.id !== "slack" && provider.status !== "blocked"
+          ),
         }))
         .filter((group) => group.providers.length > 0),
     [catalog]
