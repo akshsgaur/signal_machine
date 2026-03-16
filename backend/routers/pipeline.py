@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks
@@ -12,9 +13,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from agents.pipeline import AGENT_FILE_MAP, run_signal_pipeline
+from cache.store import cache
 from db.supabase import create_pipeline_run, get_pipeline_run, get_latest_pipeline_run
 
 router = APIRouter(prefix="/run", tags=["pipeline"])
+ANALYSIS_CACHE_TTL_SECONDS = int(os.getenv("ANALYSIS_CACHE_TTL_SECONDS", "300"))
+RUN_SOURCE_CACHE_TTL_SECONDS = int(os.getenv("RUN_SOURCE_CACHE_TTL_SECONDS", "3600"))
 
 
 class RunRequest(BaseModel):
@@ -95,6 +99,11 @@ async def run_source(run_id: str, agent_key: str):
     if not file_path:
         raise HTTPException(status_code=400, detail="Invalid agent key")
 
+    cache_key = f"run-source:{run_id}:{agent_key}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     base = Path(__file__).resolve().parents[1] / "storage" / "files" / run_id
     disk_path = base / file_path
     if not disk_path.exists():
@@ -104,11 +113,12 @@ async def run_source(run_id: str, agent_key: str):
             "content": None,
         }
 
-    return {
+    payload = {
         "run_id": run_id,
         "agent_key": agent_key,
         "content": disk_path.read_text(encoding="utf-8"),
     }
+    return cache.set(cache_key, payload, ttl_seconds=RUN_SOURCE_CACHE_TTL_SECONDS)
 
 
 @router.get("/latest/{user_id}")
@@ -118,6 +128,11 @@ async def latest_run(user_id: str):
     if not run:
         return {"run_id": None, "status": "none", "brief": None, "sources": {}}
 
+    cache_key = f"latest-analysis:{user_id}:{run['id']}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     base = Path(__file__).resolve().parents[1] / "storage" / "files" / run["id"]
     sources: dict[str, str] = {}
     for agent_key, file_path in AGENT_FILE_MAP.items():
@@ -125,9 +140,10 @@ async def latest_run(user_id: str):
         if disk_path.exists():
             sources[agent_key] = disk_path.read_text(encoding="utf-8")
 
-    return {
+    payload = {
         "run_id": run["id"],
         "status": run["status"],
         "brief": run.get("brief"),
         "sources": sources,
     }
+    return cache.set(cache_key, payload, ttl_seconds=ANALYSIS_CACHE_TTL_SECONDS)

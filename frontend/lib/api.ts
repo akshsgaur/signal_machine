@@ -366,9 +366,14 @@ export async function getRunAnalysisSource(
 }
 
 export async function getLinearDashboard(
-  userId: string
+  userId: string,
+  options?: { fresh?: boolean }
 ): Promise<LinearDashboardResponse> {
-  const res = await fetch(`${API_URL}/dashboard/linear/${userId}`);
+  const url = new URL(`${API_URL}/dashboard/linear/${userId}`);
+  if (options?.fresh) {
+    url.searchParams.set("fresh", "true");
+  }
+  const res = await fetch(url.toString());
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

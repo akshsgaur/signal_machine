@@ -5,16 +5,21 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from cache.store import cache
 from db.supabase import get_all_tokens
 from integrations.connections import build_linear_client
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 logger = logging.getLogger(__name__)
+LINEAR_DASHBOARD_CACHE_TTL_SECONDS = int(
+    os.getenv("LINEAR_DASHBOARD_CACHE_TTL_SECONDS", "30")
+)
 
 STATUS_BUCKETS = ("backlog", "active", "blocked", "done", "other")
 
@@ -420,13 +425,20 @@ def _widget_error(message: str) -> dict[str, Any]:
 
 
 @router.get("/linear/{user_id}")
-async def get_linear_dashboard(user_id: str):
+async def get_linear_dashboard(user_id: str, fresh: bool = False):
     try:
+        cache_key = f"linear-dashboard:{user_id}"
+        if not fresh:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         tokens = await get_all_tokens(user_id)
         linear_token = tokens.get("linear")
         refreshed_at = datetime.now(timezone.utc).isoformat()
         if not linear_token:
-            return {"connected": False, "refreshed_at": refreshed_at}
+            payload = {"connected": False, "refreshed_at": refreshed_at}
+            return cache.set(cache_key, payload, ttl_seconds=LINEAR_DASHBOARD_CACHE_TTL_SECONDS)
 
         client = build_linear_client(linear_token)
         tools = await client.get_tools()
@@ -508,10 +520,11 @@ async def get_linear_dashboard(user_id: str):
             ),
         }
 
-        return {
+        payload = {
             "connected": True,
             "refreshed_at": refreshed_at,
             "widgets": widgets,
         }
+        return cache.set(cache_key, payload, ttl_seconds=LINEAR_DASHBOARD_CACHE_TTL_SECONDS)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

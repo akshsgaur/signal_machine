@@ -127,6 +127,8 @@ const SIDEBAR_MAX_WIDTH = 380;
 const SIDEBAR_DEFAULT_WIDTH = 288;
 const SIDEBAR_PINNED_STORAGE_KEY = "signal-sidebar-pinned";
 const SIDEBAR_WIDTH_STORAGE_KEY = "signal-sidebar-width";
+const DASHBOARD_ANALYSIS_CACHE_PREFIX = "signal-dashboard-analysis";
+const DASHBOARD_LINEAR_CACHE_PREFIX = "signal-dashboard-linear";
 
 function formatWidgetDate(value?: string) {
   if (!value) return "";
@@ -246,6 +248,7 @@ export default function WorkspacePage() {
   const [codeSessionLoading, setCodeSessionLoading] = useState(true);
   const [codeSessionError, setCodeSessionError] = useState("");
   const [builderIframeLoaded, setBuilderIframeLoaded] = useState(false);
+  const [dashboardCacheHydrated, setDashboardCacheHydrated] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
@@ -441,6 +444,64 @@ export default function WorkspacePage() {
     linearDashboardRef.current = linearDashboard;
   }, [linearDashboard]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setDashboardCacheHydrated(false);
+      return;
+    }
+
+    try {
+      const analysisCache = window.localStorage.getItem(
+        `${DASHBOARD_ANALYSIS_CACHE_PREFIX}:${user.id}`
+      );
+      if (analysisCache) {
+        const parsed = JSON.parse(analysisCache) as {
+          run_id: string | null;
+          status: string;
+          brief: string | null;
+          sources: Record<string, string>;
+        };
+        setAnalysisData(parsed);
+      }
+
+      const linearCache = window.localStorage.getItem(
+        `${DASHBOARD_LINEAR_CACHE_PREFIX}:${user.id}`
+      );
+      if (linearCache) {
+        const parsed = JSON.parse(linearCache) as LinearDashboardResponse;
+        setLinearDashboard(parsed);
+      }
+    } catch {
+      // Ignore malformed cache and fall back to network fetch.
+    } finally {
+      setDashboardCacheHydrated(true);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !analysisData) return;
+    try {
+      window.localStorage.setItem(
+        `${DASHBOARD_ANALYSIS_CACHE_PREFIX}:${user.id}`,
+        JSON.stringify(analysisData)
+      );
+    } catch {
+      // Ignore storage quota errors.
+    }
+  }, [analysisData, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !linearDashboard) return;
+    try {
+      window.localStorage.setItem(
+        `${DASHBOARD_LINEAR_CACHE_PREFIX}:${user.id}`,
+        JSON.stringify(linearDashboard)
+      );
+    } catch {
+      // Ignore storage quota errors.
+    }
+  }, [linearDashboard, user?.id]);
+
   const refreshChatSessions = useCallback(async () => {
     if (!user) return;
     try {
@@ -482,7 +543,9 @@ export default function WorkspacePage() {
   );
 
   const refreshLinearDashboard = useCallback(
-    async ({ preserveVisible = false }: { preserveVisible?: boolean } = {}) => {
+    async (
+      { preserveVisible = false, fresh = false }: { preserveVisible?: boolean; fresh?: boolean } = {}
+    ) => {
       if (!user) return;
       if (!connected.linear?.connected) {
         setLinearDashboard(null);
@@ -500,7 +563,7 @@ export default function WorkspacePage() {
       }
       setLinearDashboardError("");
       try {
-        const data = await getLinearDashboard(user.id);
+        const data = await getLinearDashboard(user.id, { fresh });
         setLinearDashboard(data);
       } catch (err: unknown) {
         if (!preserveVisible || !hasVisibleData) {
@@ -555,7 +618,7 @@ export default function WorkspacePage() {
     setAgentRunError("");
     setAnalysisError("");
 
-    void refreshLinearDashboard({ preserveVisible: true });
+    void refreshLinearDashboard({ preserveVisible: true, fresh: true });
 
     try {
       const runId = await startRun(
@@ -619,7 +682,7 @@ export default function WorkspacePage() {
               activeDashboardStreamRef.current = null;
               void Promise.all([
                 refreshAnalysis({ preserveVisible: true }),
-                refreshLinearDashboard({ preserveVisible: true }),
+                refreshLinearDashboard({ preserveVisible: true, fresh: true }),
               ]).finally(() => {
                 setDashboardRefreshing(false);
                 setActiveRunId(null);
@@ -733,11 +796,12 @@ export default function WorkspacePage() {
     !linearDashboardError;
 
   useEffect(() => {
-    refreshAnalysis();
-  }, [refreshAnalysis]);
+    if (!dashboardCacheHydrated) return;
+    refreshAnalysis({ preserveVisible: true });
+  }, [dashboardCacheHydrated, refreshAnalysis]);
 
   useEffect(() => {
-    if (loadingIntegrations) return;
+    if (!dashboardCacheHydrated || loadingIntegrations) return;
     if (!connected.linear?.connected) {
       setLinearDashboard(null);
       setLinearDashboardError("");
@@ -745,8 +809,8 @@ export default function WorkspacePage() {
       setLinearRefreshing(false);
       return;
     }
-    refreshLinearDashboard();
-  }, [connected.linear?.connected, loadingIntegrations, refreshLinearDashboard]);
+    refreshLinearDashboard({ preserveVisible: true });
+  }, [connected.linear?.connected, dashboardCacheHydrated, loadingIntegrations, refreshLinearDashboard]);
 
   useEffect(() => {
     if (!user || loadingIntegrations) return;
