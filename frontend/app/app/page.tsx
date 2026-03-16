@@ -20,6 +20,7 @@ import {
   getIntegrations,
   getLinearDashboard,
   getLatestAnalysis,
+  getRunAnalysisSource,
   getChatTitleStreamUrl,
   getCodeSessionUrl,
   getStreamUrl,
@@ -57,6 +58,13 @@ const INTEGRATION_DESCRIPTIONS: Record<string, string> = {
   zendesk: "Support insights and themes",
   productboard: "Feature demand and requests",
   linear: "Engineering execution reality",
+};
+
+const PIPELINE_SOURCE_BY_INTEGRATION: Record<string, string> = {
+  amplitude: "behavioral",
+  zendesk: "support",
+  productboard: "feature",
+  linear: "execution",
 };
 
 type ChatMessage = {
@@ -239,7 +247,12 @@ export default function WorkspacePage() {
   const [codeSessionError, setCodeSessionError] = useState("");
   const [builderIframeLoaded, setBuilderIframeLoaded] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [refreshingSources, setRefreshingSources] = useState<Set<string>>(new Set());
+  const [updatedSources, setUpdatedSources] = useState<Set<string>>(new Set());
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentDone, setAgentDone] = useState<Set<string>>(new Set());
   const [agentRunError, setAgentRunError] = useState("");
@@ -270,11 +283,20 @@ export default function WorkspacePage() {
   } | null>(null);
   const [linearDashboard, setLinearDashboard] = useState<LinearDashboardResponse | null>(null);
   const [linearDashboardLoading, setLinearDashboardLoading] = useState(false);
+  const [linearRefreshing, setLinearRefreshing] = useState(false);
   const [linearDashboardError, setLinearDashboardError] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
   const autoRunAttemptedRef = useRef(false);
   const activeTitleStreamsRef = useRef<Map<string, EventSource>>(new Map());
+  const activeDashboardStreamRef = useRef<EventSource | null>(null);
+  const analysisDataRef = useRef<{
+    run_id: string | null;
+    status: string;
+    brief: string | null;
+    sources: Record<string, string>;
+  } | null>(null);
+  const linearDashboardRef = useRef<LinearDashboardResponse | null>(null);
   const sidebarResizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT_WIDTH });
   const overviewRef = useRef<HTMLDivElement | null>(null);
   const connectedToolsRef = useRef<HTMLDivElement | null>(null);
@@ -406,8 +428,18 @@ export default function WorkspacePage() {
     return () => {
       activeTitleStreamsRef.current.forEach((source) => source.close());
       activeTitleStreamsRef.current.clear();
+      activeDashboardStreamRef.current?.close();
+      activeDashboardStreamRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    analysisDataRef.current = analysisData;
+  }, [analysisData]);
+
+  useEffect(() => {
+    linearDashboardRef.current = linearDashboard;
+  }, [linearDashboard]);
 
   const refreshChatSessions = useCallback(async () => {
     if (!user) return;
@@ -423,47 +455,222 @@ export default function WorkspacePage() {
     refreshChatSessions();
   }, [refreshChatSessions]);
 
-  const refreshAnalysis = useCallback(async () => {
-    if (!user) return;
-    setAnalysisLoading(true);
-    setAnalysisError("");
-    try {
-      const data = await getLatestAnalysis(user.id);
-      setAnalysisData(data);
-    } catch (err: unknown) {
-      setAnalysisData(null);
-      setAnalysisError(err instanceof Error ? err.message : "Failed to load analysis");
-    } finally {
-      setAnalysisLoading(false);
-    }
-  }, [user]);
+  const refreshAnalysis = useCallback(
+    async ({ preserveVisible = false }: { preserveVisible?: boolean } = {}) => {
+      if (!user) return;
+      const hasVisibleData = !!analysisDataRef.current;
+      if (preserveVisible && hasVisibleData) {
+        setAnalysisRefreshing(true);
+      } else {
+        setAnalysisLoading(true);
+      }
+      setAnalysisError("");
+      try {
+        const data = await getLatestAnalysis(user.id);
+        setAnalysisData(data);
+      } catch (err: unknown) {
+        if (!preserveVisible || !hasVisibleData) {
+          setAnalysisData(null);
+        }
+        setAnalysisError(err instanceof Error ? err.message : "Failed to load analysis");
+      } finally {
+        setAnalysisLoading(false);
+        setAnalysisRefreshing(false);
+      }
+    },
+    [user]
+  );
 
-  const refreshLinearDashboard = useCallback(async () => {
-    if (!user) return;
-    if (!connected.linear?.connected) {
-      setLinearDashboard(null);
+  const refreshLinearDashboard = useCallback(
+    async ({ preserveVisible = false }: { preserveVisible?: boolean } = {}) => {
+      if (!user) return;
+      if (!connected.linear?.connected) {
+        setLinearDashboard(null);
+        setLinearDashboardError("");
+        setLinearDashboardLoading(false);
+        setLinearRefreshing(false);
+        return;
+      }
+
+      const hasVisibleData = !!linearDashboardRef.current;
+      if (preserveVisible && hasVisibleData) {
+        setLinearRefreshing(true);
+      } else {
+        setLinearDashboardLoading(true);
+      }
       setLinearDashboardError("");
-      setLinearDashboardLoading(false);
-      return;
-    }
-    setLinearDashboardLoading(true);
-    setLinearDashboardError("");
-    try {
-      const data = await getLinearDashboard(user.id);
-      setLinearDashboard(data);
-    } catch (err: unknown) {
-      setLinearDashboard(null);
-      setLinearDashboardError(
-        err instanceof Error ? err.message : "Failed to load Linear widgets"
-      );
-    } finally {
-      setLinearDashboardLoading(false);
-    }
-  }, [connected.linear?.connected, user]);
+      try {
+        const data = await getLinearDashboard(user.id);
+        setLinearDashboard(data);
+      } catch (err: unknown) {
+        if (!preserveVisible || !hasVisibleData) {
+          setLinearDashboard(null);
+        }
+        setLinearDashboardError(
+          err instanceof Error ? err.message : "Failed to load Linear widgets"
+        );
+      } finally {
+        setLinearDashboardLoading(false);
+        setLinearRefreshing(false);
+      }
+    },
+    [connected.linear?.connected, user]
+  );
+
+  const patchAnalysisSource = useCallback(
+    (runId: string, agentKey: string, content: string) => {
+      setAnalysisData((current) => ({
+        run_id: current?.run_id ?? runId,
+        status: current?.status ?? "running",
+        brief: current?.brief ?? null,
+        sources: {
+          ...(current?.sources ?? {}),
+          [agentKey]: content,
+        },
+      }));
+    },
+    []
+  );
 
   const refreshDashboardData = useCallback(async () => {
-    await Promise.all([refreshAnalysis(), refreshLinearDashboard()]);
-  }, [refreshAnalysis, refreshLinearDashboard]);
+    if (!user || dashboardRefreshing) return;
+
+    activeDashboardStreamRef.current?.close();
+    activeDashboardStreamRef.current = null;
+
+    const existingSourceKeys = Object.keys(analysisDataRef.current?.sources ?? {});
+    const connectedSourceKeys = Object.keys(connected)
+      .filter((key) => connected[key]?.connected && connected[key]?.pipeline_enabled)
+      .map((key) => PIPELINE_SOURCE_BY_INTEGRATION[key])
+      .filter(Boolean);
+    const initialRefreshingSources = new Set<string>([
+      ...existingSourceKeys,
+      ...connectedSourceKeys,
+    ]);
+
+    setDashboardRefreshing(true);
+    setActiveRunId(null);
+    setUpdatedSources(new Set());
+    setRefreshingSources(initialRefreshingSources);
+    setAgentRunError("");
+    setAnalysisError("");
+
+    void refreshLinearDashboard({ preserveVisible: true });
+
+    try {
+      const runId = await startRun(
+        user.id,
+        "Analyze all product signals and customer feedback to surface key trends, risks, and opportunities",
+        "All"
+      );
+      setActiveRunId(runId);
+
+      const es = new EventSource(getStreamUrl(runId));
+      activeDashboardStreamRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data) as
+            | { type: "agent_update"; agent: string; status: string }
+            | { type: "brief_chunk"; content: string }
+            | { type: "status"; status: string };
+
+          if (message.type === "agent_update" && message.status === "complete") {
+            void (async () => {
+              try {
+                const source = await getRunAnalysisSource(runId, message.agent);
+                if (source.content) {
+                  patchAnalysisSource(runId, message.agent, source.content);
+                }
+                setRefreshingSources((current) => {
+                  const next = new Set(current);
+                  next.delete(message.agent);
+                  return next;
+                });
+                setUpdatedSources((current) => {
+                  const next = new Set(current);
+                  next.add(message.agent);
+                  return next;
+                });
+              } catch {
+                setRefreshingSources((current) => {
+                  const next = new Set(current);
+                  next.delete(message.agent);
+                  return next;
+                });
+              }
+            })();
+            return;
+          }
+
+          if (message.type === "brief_chunk") {
+            setAnalysisData((current) => ({
+              run_id: current?.run_id ?? runId,
+              status: current?.status ?? "running",
+              brief: message.content,
+              sources: current?.sources ?? {},
+            }));
+            return;
+          }
+
+          if (message.type === "status") {
+            if (message.status === "complete") {
+              es.close();
+              activeDashboardStreamRef.current = null;
+              void Promise.all([
+                refreshAnalysis({ preserveVisible: true }),
+                refreshLinearDashboard({ preserveVisible: true }),
+              ]).finally(() => {
+                setDashboardRefreshing(false);
+                setActiveRunId(null);
+                setRefreshingSources(new Set());
+                setUpdatedSources(new Set());
+              });
+              return;
+            }
+
+            if (message.status === "failed" || message.status === "timeout") {
+              es.close();
+              activeDashboardStreamRef.current = null;
+              setDashboardRefreshing(false);
+              setActiveRunId(null);
+              setRefreshingSources(new Set());
+              setUpdatedSources(new Set());
+              setAgentRunError(
+                message.status === "failed"
+                  ? "Dashboard refresh failed. Showing previous results."
+                  : "Dashboard refresh timed out. Showing previous results."
+              );
+            }
+          }
+        } catch {
+          es.close();
+          activeDashboardStreamRef.current = null;
+          setDashboardRefreshing(false);
+          setActiveRunId(null);
+          setRefreshingSources(new Set());
+          setUpdatedSources(new Set());
+          setAgentRunError("Dashboard refresh failed. Showing previous results.");
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+        activeDashboardStreamRef.current = null;
+        setDashboardRefreshing(false);
+        setActiveRunId(null);
+        setRefreshingSources(new Set());
+        setUpdatedSources(new Set());
+        setAgentRunError("Dashboard refresh failed. Showing previous results.");
+      };
+    } catch (err: unknown) {
+      setDashboardRefreshing(false);
+      setActiveRunId(null);
+      setRefreshingSources(new Set());
+      setUpdatedSources(new Set());
+      setAgentRunError(err instanceof Error ? err.message : "Failed to refresh dashboard");
+    }
+  }, [connected, dashboardRefreshing, patchAnalysisSource, refreshAnalysis, refreshLinearDashboard, user]);
 
   const runDeepAgent = useCallback(async () => {
     if (!user || agentRunning) return;
@@ -487,7 +694,7 @@ export default function WorkspacePage() {
             es.close();
             setAgentRunning(false);
             if (msg.status === "complete") {
-              refreshAnalysis();
+              refreshAnalysis({ preserveVisible: !!analysisDataRef.current });
             } else {
               setAgentRunError("Run ended with status: " + msg.status);
             }
@@ -521,6 +728,7 @@ export default function WorkspacePage() {
   const showLinearWidgetNotice =
     !!connected.linear?.connected &&
     !linearDashboardLoading &&
+    !linearRefreshing &&
     !showLinearWidgets &&
     !linearDashboardError;
 
@@ -534,6 +742,7 @@ export default function WorkspacePage() {
       setLinearDashboard(null);
       setLinearDashboardError("");
       setLinearDashboardLoading(false);
+      setLinearRefreshing(false);
       return;
     }
     refreshLinearDashboard();
@@ -1346,13 +1555,25 @@ export default function WorkspacePage() {
                     </button>
                     <button
                       onClick={refreshDashboardData}
-                      disabled={analysisLoading || linearDashboardLoading}
-                      className="rounded-xl border border-zinc-800 bg-black px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+                      disabled={dashboardRefreshing || analysisLoading || linearDashboardLoading}
+                      className="rounded-xl border border-zinc-800 bg-black px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {analysisLoading || linearDashboardLoading ? "Refreshing..." : "Refresh"}
+                      {dashboardRefreshing || analysisRefreshing || linearRefreshing
+                        ? "Refreshing..."
+                        : "Refresh"}
                     </button>
                   </div>
                 </div>
+
+                {dashboardRefreshing && (
+                  <div className="flex items-center gap-2 text-sm text-zinc-400">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-zinc-500" />
+                    Updating dashboard in place
+                    {activeRunId && (
+                      <span className="text-zinc-600">#{activeRunId.slice(0, 8)}</span>
+                    )}
+                  </div>
+                )}
 
                 {agentRunning && (
                   <div
@@ -1623,6 +1844,12 @@ export default function WorkspacePage() {
                   </div>
                 )}
 
+                {showLinearWidgets && linearRefreshing && (
+                  <div className="-mt-2 text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    Refreshing live Linear widgets
+                  </div>
+                )}
+
                 {loadingIntegrations ? (
                   <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">
                     Loading integrations...
@@ -1645,7 +1872,7 @@ export default function WorkspacePage() {
                       </Link>
                     </div>
                   </div>
-                ) : analysisLoading || agentRunning ? (
+                ) : analysisLoading || (agentRunning && !analysisData) ? (
                   <div className="rounded-2xl border border-zinc-800 bg-black p-6 text-sm text-zinc-400">
                     Generating analysis from your connected integrations...
                   </div>
@@ -1698,8 +1925,20 @@ export default function WorkspacePage() {
                                     "Integrated data source for analysis."}
                                 </p>
                               </div>
-                              <div className="text-xs text-emerald-400 font-medium">
-                                Connected
+                              <div className="flex items-center gap-2 text-xs font-medium">
+                                {refreshingSources.has(analysisKey) ? (
+                                  <>
+                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />
+                                    <span className="text-zinc-400">Updating</span>
+                                  </>
+                                ) : updatedSources.has(analysisKey) ? (
+                                  <>
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                    <span className="text-emerald-400">Updated</span>
+                                  </>
+                                ) : (
+                                  <span className="text-emerald-400">Connected</span>
+                                )}
                               </div>
                             </div>
                             <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-4 text-sm text-zinc-200">
@@ -1723,7 +1962,21 @@ export default function WorkspacePage() {
                               Themes from uploaded customer interviews
                             </p>
                           </div>
-                          <div className="text-xs text-emerald-400 font-medium">Morphik</div>
+                          <div className="flex items-center gap-2 text-xs font-medium">
+                            {refreshingSources.has("insights") ? (
+                              <>
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />
+                                <span className="text-zinc-400">Updating</span>
+                              </>
+                            ) : updatedSources.has("insights") ? (
+                              <>
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                <span className="text-emerald-400">Updated</span>
+                              </>
+                            ) : (
+                              <span className="text-emerald-400">Morphik</span>
+                            )}
+                          </div>
                         </div>
                         <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-4 text-sm text-zinc-200">
                           <div className="prose prose-invert prose-sm max-w-none">
@@ -1740,6 +1993,12 @@ export default function WorkspacePage() {
                     ref={latestBriefRef}
                     className="rounded-2xl border border-zinc-800 bg-black p-5"
                   >
+                    {dashboardRefreshing && (
+                      <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-zinc-500">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />
+                        Refreshing brief
+                      </div>
+                    )}
                     <div className="prose prose-invert prose-sm max-w-none text-zinc-200">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {analysisData.brief}

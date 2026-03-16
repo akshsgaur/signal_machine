@@ -352,6 +352,19 @@ export async function getLatestAnalysis(
   return res.json();
 }
 
+export async function getRunAnalysisSource(
+  runId: string,
+  agentKey: string
+): Promise<{
+  run_id: string;
+  agent_key: string;
+  content: string | null;
+}> {
+  const res = await fetch(`${API_URL}/run/${runId}/source/${agentKey}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function getLinearDashboard(
   userId: string
 ): Promise<LinearDashboardResponse> {

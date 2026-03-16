@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks
+from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -85,6 +86,29 @@ async def stream_run(run_id: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/{run_id}/source/{agent_key}")
+async def run_source(run_id: str, agent_key: str):
+    """Return one source file for a specific run so the dashboard can patch incrementally."""
+    file_path = AGENT_FILE_MAP.get(agent_key)
+    if not file_path:
+        raise HTTPException(status_code=400, detail="Invalid agent key")
+
+    base = Path(__file__).resolve().parents[1] / "storage" / "files" / run_id
+    disk_path = base / file_path
+    if not disk_path.exists():
+        return {
+            "run_id": run_id,
+            "agent_key": agent_key,
+            "content": None,
+        }
+
+    return {
+        "run_id": run_id,
+        "agent_key": agent_key,
+        "content": disk_path.read_text(encoding="utf-8"),
+    }
 
 
 @router.get("/latest/{user_id}")
