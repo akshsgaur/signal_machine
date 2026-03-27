@@ -14,10 +14,14 @@ Category = Literal[
     "Collaboration",
     "Product design",
     "Market intelligence",
+    "Engineering Intelligence",
 ]
 Status = Literal["supported", "blocked", "existing_non_mcp"]
 AuthMode = Literal["token", "json_credentials", "oauth_future", "oauth"]
 Transport = Literal["streamable_http", "stdio", "custom"]
+ProviderBackend = Literal["signal_native", "airbyte_cloud"]
+ConnectionMode = Literal["inline_credentials", "oauth_redirect", "external_link"]
+ConnectionScope = Literal["user", "workspace"]
 
 
 @dataclass(frozen=True)
@@ -45,6 +49,12 @@ class IntegrationProvider:
     chat_enabled: bool = False
     pipeline_enabled: bool = False
     builder_key: str | None = None
+    provider_backend: ProviderBackend = "signal_native"
+    runtime_ready: bool = True
+    connection_mode: ConnectionMode = "inline_credentials"
+    connection_scope: ConnectionScope = "user"
+    airbyte_provider_name: str | None = None
+    connection_note: str | None = None
 
 
 _PROVIDERS: tuple[IntegrationProvider, ...] = (
@@ -109,7 +119,7 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
         status="supported",
         surfaces=["connect", "chat", "pipeline"],
         auth_mode="token",
-        transport="streamable_http",
+        transport="custom",
         credential_schema=[
             CredentialField("token", "API Token", "password", "Paste Linear API token")
         ],
@@ -117,6 +127,10 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
         chat_enabled=True,
         pipeline_enabled=True,
         builder_key="linear",
+        provider_backend="airbyte_cloud",
+        runtime_ready=True,
+        airbyte_provider_name="linear",
+        connection_note="Provisioned in Airbyte Cloud. Signal chat, dashboard, and pipeline use the hosted Airbyte Linear runtime.",
     ),
     IntegrationProvider(
         id="monday",
@@ -126,13 +140,49 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
         status="supported",
         surfaces=["connect", "chat"],
         auth_mode="token",
-        transport="stdio",
+        transport="custom",
         credential_schema=[
             CredentialField("api_token", "API Token", "password", "Paste monday.com API token")
         ],
         logo_path="/monday_logo.png",
-        chat_enabled=True,
-        builder_key="monday",
+        provider_backend="airbyte_cloud",
+        runtime_ready=False,
+        airbyte_provider_name="monday",
+        connection_note="Provisioned in Airbyte Cloud. Signal chat and pipeline runtime still use the legacy path for now.",
+    ),
+    IntegrationProvider(
+        id="asana",
+        label="Asana",
+        category="Product development",
+        description="Projects, tasks, teams, and execution workflows.",
+        status="supported",
+        surfaces=["connect"],
+        auth_mode="token",
+        transport="custom",
+        credential_schema=[
+            CredentialField("token", "Personal Access Token", "password", "Paste Asana personal access token")
+        ],
+        provider_backend="airbyte_cloud",
+        runtime_ready=False,
+        airbyte_provider_name="asana",
+        connection_note="Provisioned in Airbyte Cloud. Signal chat and pipeline runtime still use the legacy path for now.",
+    ),
+    IntegrationProvider(
+        id="github",
+        label="GitHub",
+        category="Product development",
+        description="Repositories, issues, pull requests, and engineering activity.",
+        status="supported",
+        surfaces=["connect"],
+        auth_mode="token",
+        transport="custom",
+        credential_schema=[
+            CredentialField("token", "Personal Access Token", "password", "Paste GitHub personal access token")
+        ],
+        provider_backend="airbyte_cloud",
+        runtime_ready=False,
+        airbyte_provider_name="github",
+        connection_note="Provisioned in Airbyte Cloud. Signal chat and pipeline runtime still use the legacy path for now.",
     ),
     IntegrationProvider(
         id="amplitude",
@@ -150,6 +200,40 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
         chat_enabled=True,
         pipeline_enabled=True,
         builder_key="amplitude",
+    ),
+    IntegrationProvider(
+        id="sentry",
+        label="Sentry",
+        category="Product analytics and insights",
+        description="Errors, releases, events, and production issue monitoring.",
+        status="supported",
+        surfaces=["connect"],
+        auth_mode="token",
+        transport="custom",
+        credential_schema=[
+            CredentialField("auth_token", "Auth Token", "password", "Paste Sentry auth token")
+        ],
+        provider_backend="airbyte_cloud",
+        runtime_ready=False,
+        airbyte_provider_name="sentry",
+        connection_note="Provisioned in Airbyte Cloud. Signal chat and pipeline runtime still use the legacy path for now.",
+    ),
+    IntegrationProvider(
+        id="typeform",
+        label="Typeform",
+        category="Product analytics and insights",
+        description="Forms, responses, workspaces, and survey feedback.",
+        status="supported",
+        surfaces=["connect"],
+        auth_mode="token",
+        transport="custom",
+        credential_schema=[
+            CredentialField("access_token", "Access Token", "password", "Paste Typeform personal access token")
+        ],
+        provider_backend="airbyte_cloud",
+        runtime_ready=False,
+        airbyte_provider_name="typeform",
+        connection_note="Provisioned in Airbyte Cloud. Signal chat and pipeline runtime still use the legacy path for now.",
     ),
     IntegrationProvider(
         id="zendesk",
@@ -244,6 +328,27 @@ _PROVIDERS: tuple[IntegrationProvider, ...] = (
         reason_unavailable="Deferred until the app supports OAuth-capable remote MCP connections.",
     ),
     IntegrationProvider(
+        id="macroscope",
+        label="Macroscope",
+        category="Engineering Intelligence",
+        description="Code search, git history, PRs, issues, logs, and engineering delivery context.",
+        status="supported",
+        surfaces=["connect", "chat", "pipeline"],
+        auth_mode="json_credentials",
+        transport="custom",
+        provider_backend="signal_native",
+        runtime_ready=False,
+        credential_schema=[
+            CredentialField("workspace_type", "Workspace Type", "text", "github-org"),
+            CredentialField("workspace_id", "Workspace ID", "text", "your-github-org"),
+            CredentialField("webhook_secret", "Webhook Secret", "password", "Paste Macroscope webhook secret"),
+            CredentialField("default_repo", "Default Repo", "text", "signal_machine", required=False),
+        ],
+        connection_mode="inline_credentials",
+        connection_scope="workspace",
+        connection_note="Workspace-level engineering source. Add a Macroscope webhook, allowlist Signal's callback URL, then save the workspace webhook credentials here.",
+    ),
+    IntegrationProvider(
         id="gong",
         label="Gong",
         category="Product analytics and insights",
@@ -286,6 +391,7 @@ _CATEGORY_ORDER: tuple[Category, ...] = (
     "Collaboration",
     "Product design",
     "Market intelligence",
+    "Engineering Intelligence",
 )
 
 
@@ -298,12 +404,25 @@ def list_providers() -> list[IntegrationProvider]:
 
 
 def list_chat_providers() -> list[IntegrationProvider]:
-    return [provider for provider in _PROVIDERS if provider.chat_enabled and provider.builder_key]
+    return [
+        provider
+        for provider in _PROVIDERS
+        if provider.chat_enabled and provider.builder_key and provider.runtime_ready
+    ]
 
 
 def is_provider_connectable(provider: IntegrationProvider) -> bool:
     if provider.status != "supported":
         return False
+    if provider.connection_mode == "external_link":
+        return True
+    if provider.provider_backend == "airbyte_cloud":
+        return bool(
+            os.getenv("AIRBYTE_CLIENT_ID")
+            and os.getenv("AIRBYTE_CLIENT_SECRET")
+            and os.getenv("AIRBYTE_ORGANIZATION_ID")
+            and provider.airbyte_provider_name
+        )
     if provider.builder_key == "aha":
         return bool(os.getenv("AHA_MCP_COMMAND") or os.getenv("AHA_MCP_SERVER_PATH"))
     if provider.builder_key == "monday":
@@ -375,10 +494,19 @@ def validate_credentials(provider: IntegrationProvider, credentials: dict[str, A
     return cleaned
 
 
-def build_integration_status_map(connected_types: set[str]) -> dict[str, dict[str, Any]]:
+def build_integration_status_map(
+    connected_types: set[str],
+    workspace_connected_types: set[str] | None = None,
+) -> dict[str, dict[str, Any]]:
     statuses: dict[str, dict[str, Any]] = {}
+    workspace_connected_types = workspace_connected_types or set()
     for provider in _PROVIDERS:
-        connected = provider.id in connected_types
+        relevant_connected_types = (
+            workspace_connected_types
+            if provider.connection_scope == "workspace"
+            else connected_types
+        )
+        connected = provider.id in relevant_connected_types
         status = "connected" if connected else (
             "available" if is_provider_connectable(provider) else "not_supported_in_this_phase"
         )
@@ -392,5 +520,10 @@ def build_integration_status_map(connected_types: set[str]) -> dict[str, dict[st
             "label": provider.label,
             "connectable": is_provider_connectable(provider),
             "pipeline_enabled": provider.pipeline_enabled,
+            "provider_backend": provider.provider_backend,
+            "runtime_ready": provider.runtime_ready,
+            "connection_mode": provider.connection_mode,
+            "connection_scope": provider.connection_scope,
+            "note": provider.connection_note,
         }
     return statuses

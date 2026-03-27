@@ -1,4 +1,4 @@
-"""Signal pipeline orchestration — 2-phase parallel + sequential agent execution."""
+"""Signal pipeline orchestration with per-user authenticated source selection."""
 
 from __future__ import annotations
 
@@ -20,23 +20,25 @@ from mcp import McpError
 from agents.file_tools import ls, read_file, write_file, write_file_to_storage
 from agents.think_tool import think_tool
 from agents.prompts import (
-    BEHAVIORAL_AGENT_PROMPT,
-    CONFLUENCE_AGENT_PROMPT,
-    EXECUTION_AGENT_PROMPT,
-    FEATURE_AGENT_PROMPT,
-    JIRA_AGENT_PROMPT,
     MISSING_SOURCE_NOTE,
-    SUPPORT_AGENT_PROMPT,
     SYNTHESIS_AGENT_PROMPT,
 )
+from agents.runtime_plan import build_pipeline_research_config
 from agents.state import DeepAgentState
-from db.supabase import get_all_integration_credentials, get_all_tokens, update_pipeline_brief
-from integrations.connections import (
-    build_amplitude_client,
-    build_atlassian_client,
-    build_linear_client,
-    build_productboard_client,
-    build_zendesk_client,
+from db.supabase import (
+    create_macroscope_run,
+    fail_macroscope_run,
+    get_all_integration_credentials,
+    get_all_tokens,
+    get_macroscope_run,
+    get_workspace_integration_credentials,
+    set_macroscope_workflow_id,
+    update_pipeline_brief,
+)
+from integrations.macroscope import (
+    MacroscopeClient,
+    MacroscopeError,
+    build_macroscope_callback_url,
 )
 
 # ---------------------------------------------------------------------------
@@ -45,6 +47,8 @@ from integrations.connections import (
 
 MORPHIK_BASE_URL = os.getenv("MORPHIK_BASE_URL", "https://api.morphik.ai")
 MORPHIK_API_KEY = os.getenv("MORPHIK_API_KEY")
+DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles")
+MACROSCOPE_TIMEOUT_SECONDS = int(os.getenv("MACROSCOPE_TIMEOUT_SECONDS", "120"))
 
 AGENT_FILE_MAP: dict[str, str] = {
     "behavioral": "behavioral/amplitude_signals.md",
@@ -53,6 +57,7 @@ AGENT_FILE_MAP: dict[str, str] = {
     "execution": "linear/execution_reality.md",
     "jira": "jira/jira_signals.md",
     "confluence": "confluence/confluence_signals.md",
+    "engineering": "engineering/macroscope_signals.md",
     "insights": "insights/customer_insights.md",
 }
 
@@ -97,13 +102,10 @@ async def _run_agent(
         "run_id": run_id,
     }
 
-    # No integration connected — write fallback immediately, skip agent run
+    # No authenticated integration for this source — skip the agent entirely.
     if client_builder is None:
-        fallback_key = AGENT_FILE_MAP.get(name, f"{name}/output.md")
-        content = MISSING_SOURCE_NOTE.format(source=name)
-        write_file_to_storage(run_id, fallback_key, content)
-        _print_progress("Phase 1", name, "done", "no integration connected")
-        return (name, {fallback_key: content})
+        _print_progress("Phase 1", name, "done", "skipped")
+        return (name, {})
 
     try:
         client = client_builder()
@@ -219,65 +221,154 @@ async def _fetch_morphik_insights(
     return ("insights", {file_key: content})
 
 
+async def _fetch_macroscope_engineering_insights(
+    workspace_id: str,
+    user_id: str,
+    run_id: str,
+    hypothesis: str,
+    product_area: str,
+) -> tuple[str, dict[str, str]]:
+    """Trigger Macroscope asynchronously and wait for the engineering summary callback."""
+    file_key = AGENT_FILE_MAP["engineering"]
+    _print_progress("Phase 1", "engineering", "start")
+    t0 = time.time()
+
+    credentials = await get_workspace_integration_credentials(workspace_id, "macroscope")
+    if not credentials:
+        _print_progress("Phase 1", "engineering", "done", "skipped")
+        return ("engineering", {})
+
+    try:
+        client = MacroscopeClient.from_credentials(credentials)
+        macroscope_run_id = await create_macroscope_run(
+            workspace_id,
+            user_id,
+            mode="pipeline",
+            query="pending",
+            pipeline_run_id=run_id,
+        )
+        query = client.build_deep_analysis_query(
+            request_id=macroscope_run_id,
+            hypothesis=hypothesis,
+            product_area=product_area,
+        )
+        workflow_id = await client.trigger_query(
+            query=query,
+            webhook_url=build_macroscope_callback_url(),
+            timezone=DEFAULT_TIMEZONE,
+        )
+        await set_macroscope_workflow_id(macroscope_run_id, workflow_id)
+
+        deadline = time.time() + MACROSCOPE_TIMEOUT_SECONDS
+        while time.time() < deadline:
+            await asyncio.sleep(2)
+            run = await get_macroscope_run(macroscope_run_id)
+            if not run:
+                break
+            if run.get("status") == "complete":
+                response = (run.get("response") or "").strip()
+                if not response:
+                    break
+                content = (
+                    "# Engineering Signals — Macroscope\n\n"
+                    f"{response}\n"
+                )
+                write_file_to_storage(run_id, file_key, content)
+                _print_progress(
+                    "Phase 1",
+                    "engineering",
+                    "done",
+                    f"workflow {workflow_id}, {time.time()-t0:.1f}s",
+                )
+                return ("engineering", {file_key: content})
+            if run.get("status") == "failed":
+                break
+
+        timeout_content = (
+            "# Engineering Signals — Macroscope\n\n"
+            "Macroscope did not return engineering analysis within the allowed time window."
+        )
+        write_file_to_storage(run_id, file_key, timeout_content)
+        await fail_macroscope_run(
+            macroscope_run_id,
+            "Macroscope timed out before delivering a callback.",
+            status="timeout",
+        )
+        _print_progress("Phase 1", "engineering", "done", "timeout")
+        return ("engineering", {file_key: timeout_content})
+    except MacroscopeError as exc:
+        if "macroscope_run_id" in locals():
+            await fail_macroscope_run(macroscope_run_id, str(exc))
+        error_content = f"# Engineering Signals — Macroscope\n\nError: {exc}"
+        write_file_to_storage(run_id, file_key, error_content)
+        _print_progress("Phase 1", "engineering", "done", f"ERROR: {exc}")
+        return ("engineering", {file_key: error_content})
+    except Exception as exc:
+        if "macroscope_run_id" in locals():
+            await fail_macroscope_run(macroscope_run_id, str(exc))
+        error_content = f"# Engineering Signals — Macroscope\n\nError: {exc}"
+        write_file_to_storage(run_id, file_key, error_content)
+        _print_progress("Phase 1", "engineering", "done", f"ERROR: {exc}")
+        return ("engineering", {file_key: error_content})
+
+
 async def run_signal_pipeline(
     run_id: str,
     user_id: str,
     hypothesis: str,
     product_area: str,
+    workspace_id: str | None = None,
 ) -> None:
-    """Orchestrate the full Signal 2-phase pipeline for a single run.
+    """Orchestrate the Signal 2-phase pipeline for a single run.
 
-    Phase 1: 4 research agents run in parallel via asyncio.gather().
-             All coroutines share the same event loop — MCP/anyio connections
-             stay alive correctly without cross-thread event loop conflicts.
-    Phase 2: 1 synthesis agent reads all 4 files sequentially (no MCP needed).
+    Phase 1 runs only the research agents backed by the user's authenticated
+    runtime integrations, plus customer insights when available.
+    Phase 2 synthesizes whichever evidence files were actually produced.
     """
     try:
-        # 1. Fetch all tokens from Supabase
+        resolved_workspace_id = (workspace_id or user_id).strip()
+        # 1. Fetch all runtime-capable integration credentials for this user.
         credentials = await get_all_integration_credentials(user_id)
         tokens = await get_all_tokens(user_id)
+        macroscope_credentials = await get_workspace_integration_credentials(
+            resolved_workspace_id,
+            "macroscope",
+        )
 
         # 2. Shared model + base tools — use user-configured key/model if set
         openai_api_key = tokens.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
         openai_model = tokens.get("openai_model") or "gpt-5.2"
         model = ChatOpenAI(model=openai_model, api_key=openai_api_key, temperature=0.0)
         base_tools = [ls, read_file, write_file, think_tool]
-        fmt = dict(hypothesis=hypothesis, product_area=product_area)
+        fmt = {"hypothesis": hypothesis, "product_area": product_area}
+        research_config = build_pipeline_research_config(
+            credentials,
+            hypothesis,
+            product_area,
+        )
 
-        # 3. Client builders — callables that return a fresh MultiServerMCPClient.
-        def _builder(build_fn, token):
-            return lambda: build_fn(token)
-
-        research_config: dict[str, tuple[Callable | None, str]] = {
-            "behavioral": (
-                _builder(build_amplitude_client, credentials["amplitude"]) if "amplitude" in credentials else None,
-                BEHAVIORAL_AGENT_PROMPT.format(**fmt),
-            ),
-            "support": (
-                _builder(build_zendesk_client, credentials["zendesk"]) if "zendesk" in credentials else None,
-                SUPPORT_AGENT_PROMPT.format(**fmt),
-            ),
-            "feature": (
-                _builder(build_productboard_client, credentials["productboard"]) if "productboard" in credentials else None,
-                FEATURE_AGENT_PROMPT.format(**fmt),
-            ),
-            "execution": (
-                _builder(build_linear_client, credentials["linear"]) if "linear" in credentials else None,
-                EXECUTION_AGENT_PROMPT.format(**fmt),
-            ),
-            "jira": (
-                _builder(build_atlassian_client, credentials["atlassian"]) if "atlassian" in credentials else None,
-                JIRA_AGENT_PROMPT.format(**fmt),
-            ),
-            "confluence": (
-                _builder(build_atlassian_client, credentials["atlassian"]) if "atlassian" in credentials else None,
-                CONFLUENCE_AGENT_PROMPT.format(**fmt),
-            ),
-        }
-
-        # 4. Phase 1 — run 4 research agents in parallel via asyncio.gather()
+        # 4. Phase 1 — run only the authenticated research agents in parallel.
         #    All coroutines run in the same event loop — no thread/asyncio.run() mismatch.
-        _print_progress("Phase 1", "RESEARCH", "info", "Starting 4 research agents in parallel")
+        enabled_agents = sorted(research_config)
+        if not enabled_agents and not MORPHIK_API_KEY and not macroscope_credentials:
+            no_sources_brief = (
+                "# Decision Brief\n\n"
+                "## Executive Summary\n"
+                "Insufficient Data.\n\n"
+                "No authenticated runtime integrations or engineering workspace sources are available for this analysis yet. "
+                "Connect at least one supported source in Manage Integrations and rerun the analysis."
+            )
+            write_file_to_storage(run_id, "output/decision_brief.md", no_sources_brief)
+            await update_pipeline_brief(run_id, no_sources_brief, "complete")
+            return
+
+        summary_parts = list(enabled_agents)
+        if MORPHIK_API_KEY:
+            summary_parts.append("insights")
+        if macroscope_credentials:
+            summary_parts.append("engineering")
+        agent_summary = ", ".join(summary_parts) if summary_parts else "none"
+        _print_progress("Phase 1", "RESEARCH", "info", f"Starting agents: {agent_summary}")
 
         results = await asyncio.gather(
             *[
@@ -294,6 +385,15 @@ async def run_signal_pipeline(
                 for name, (client_builder, prompt) in research_config.items()
             ],
             _fetch_morphik_insights(user_id, run_id, hypothesis, product_area),
+            _fetch_macroscope_engineering_insights(
+                resolved_workspace_id,
+                user_id,
+                run_id,
+                hypothesis,
+                product_area,
+            )
+            if macroscope_credentials
+            else asyncio.sleep(0, result=("engineering", {})),
             return_exceptions=True,
         )
 

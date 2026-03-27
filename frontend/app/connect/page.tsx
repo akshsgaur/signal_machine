@@ -23,6 +23,7 @@ const OPENAI_MODELS = [
 
 export default function ConnectPage() {
   const { user, isLoaded } = useUser();
+  const workspaceId = user?.id ?? "";
   const [catalog, setCatalog] = useState<IntegrationCatalogGroup[]>([]);
   const [connected, setConnected] = useState<Record<string, IntegrationStatus>>({});
   const [aiModel, setAiModel] = useState("gpt-5.2");
@@ -33,12 +34,12 @@ export default function ConnectPage() {
   const refreshConnections = useCallback(async () => {
     try {
       if (!user) return;
-      const data = await getIntegrations(user.id);
+      const data = await getIntegrations(user.id, workspaceId);
       setConnected(data);
     } catch {
       // ignore - user may not have any integrations yet
     }
-  }, [user]);
+  }, [user, workspaceId]);
 
   const loadCatalog = useCallback(async () => {
     try {
@@ -81,13 +82,24 @@ export default function ConnectPage() {
     [catalog]
   );
 
+  const macroscopeProvider = useMemo(
+    () =>
+      catalog
+        .flatMap((group) => group.providers)
+        .find((provider) => provider.id === "macroscope"),
+    [catalog]
+  );
+
   const renderGroups = useMemo(
     () =>
       catalog
         .map((group) => ({
           ...group,
           providers: group.providers.filter(
-            (provider) => provider.id !== "slack" && provider.status !== "blocked"
+            (provider) =>
+              provider.id !== "slack" &&
+              provider.id !== "macroscope" &&
+              provider.status !== "blocked"
           ),
         }))
         .filter((group) => group.providers.length > 0),
@@ -109,7 +121,7 @@ export default function ConnectPage() {
           <div>
             <h1 className="text-2xl font-bold text-white">Integrations</h1>
             <p className="text-zinc-400 text-sm mt-1">
-              Connect MCP-backed sources for chat and keep the existing analysis pipeline intact.
+              Connect sources from Signal and Airbyte-backed flows while the existing chat and analysis runtime stays intact.
             </p>
           </div>
           <Link
@@ -172,6 +184,7 @@ export default function ConnectPage() {
           <IntegrationCard
             provider={slackProvider}
             userId={user?.id ?? ""}
+            workspaceId={workspaceId}
             state={connected["slack"]}
             onConnected={refreshConnections}
             connectHref={
@@ -182,6 +195,17 @@ export default function ConnectPage() {
             }
             secondaryLabel="Enable private + DMs"
             note="Connects public channels first. Enable private access if you want DMs and private channels."
+          />
+        )}
+
+        {macroscopeProvider && (
+          <IntegrationCard
+            provider={macroscopeProvider}
+            userId={user?.id ?? ""}
+            workspaceId={workspaceId}
+            state={connected["macroscope"]}
+            onConnected={refreshConnections}
+            note="Macroscope is workspace-scoped. Create a webhook in Macroscope, allowlist Signal's callback URL there, then save the webhook credentials here."
           />
         )}
 
@@ -200,6 +224,8 @@ export default function ConnectPage() {
                   "Design collaboration and prototyping tools."}
                 {group.category === "Market intelligence" &&
                   "External analyst and market research sources."}
+                {group.category === "Engineering Intelligence" &&
+                  "Code, PRs, git history, issues, logs, and engineering delivery context."}
               </p>
             </div>
 
@@ -209,6 +235,7 @@ export default function ConnectPage() {
                   key={provider.id}
                   provider={provider}
                   userId={user?.id ?? ""}
+                  workspaceId={workspaceId}
                   state={connected[provider.id]}
                   onConnected={refreshConnections}
                 />

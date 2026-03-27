@@ -267,6 +267,7 @@ Your mission: Read the available research files and produce a structured decisio
    - linear/execution_reality.md
    - jira/jira_signals.md (if it exists)
    - confluence/confluence_signals.md (if it exists)
+   - engineering/macroscope_signals.md (if it exists)
    - insights/customer_insights.md (if it exists)
 3. Skip disconnected or unavailable integrations entirely.
 4. Do not include sections that only say the integration was unavailable.
@@ -304,6 +305,9 @@ Your mission: Read the available research files and produce a structured decisio
 
 ### Confluence
 [Key documentation signals, confidence level — omit section if file not present]
+
+### Engineering Signals (Macroscope)
+[Key code, git history, PR, issue, and delivery signals, confidence level — omit section if file not present]
 
 ### Customer Insights (Morphik)
 [Key themes from customer interviews, if available and evidence exists]

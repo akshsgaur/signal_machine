@@ -10,9 +10,15 @@ from langchain_core.tools import tool
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from db.supabase import get_all_integration_credentials, get_all_tokens, get_slack_tokens, query_slack_messages
+from db.supabase import (
+    get_all_integration_credentials,
+    get_all_tokens,
+    get_slack_tokens,
+    list_integration_records,
+    query_slack_messages,
+)
 from integrations.connections import create_mcp_client, get_tools_for_client
-from integrations.registry import is_provider_connectable, list_chat_providers
+from integrations.registry import get_provider, is_provider_connectable, list_chat_providers
 
 CHAT_SYSTEM_PROMPT = """You are Signal, a product intelligence assistant.
 
@@ -375,14 +381,16 @@ def build_slack_tool(user_id: str):
 async def build_chat_tools(
     user_id: str,
     folder_name: str | None = None,
-) -> Tuple[List[object], Dict[str, str], List[str]]:
+) -> Tuple[List[object], Dict[str, str], List[str], List[str]]:
     """Build MCP tools from connected integrations and map tool->source."""
     credentials_by_provider = await get_all_integration_credentials(user_id)
     tokens = await get_all_tokens(user_id)
+    records = await list_integration_records(user_id)
 
     tools: List[object] = []
     tool_to_source: Dict[str, str] = {}
     connected_sources: List[str] = []
+    unavailable_sources: List[str] = []
 
     for provider in list_chat_providers():
         credentials = credentials_by_provider.get(provider.id)
@@ -426,7 +434,21 @@ async def build_chat_tools(
             tool_to_source[slack_name] = "Slack"
         connected_sources.append("Slack")
 
-    return tools, tool_to_source, connected_sources
+    connected_provider_ids = {
+        row.get("integration_type")
+        for row in records
+        if isinstance(row.get("integration_type"), str)
+    }
+    for provider_id in connected_provider_ids:
+        provider = get_provider(provider_id)
+        if provider is None:
+            continue
+        if provider.label in connected_sources or provider.label in unavailable_sources:
+            continue
+        if provider.chat_enabled and not provider.runtime_ready:
+            unavailable_sources.append(provider.label)
+
+    return tools, tool_to_source, connected_sources, unavailable_sources
 
 
 def extract_sources_used(result: object, tool_to_source: Dict[str, str]) -> List[str]:

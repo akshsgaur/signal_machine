@@ -23,6 +23,7 @@ RUN_SOURCE_CACHE_TTL_SECONDS = int(os.getenv("RUN_SOURCE_CACHE_TTL_SECONDS", "36
 
 class RunRequest(BaseModel):
     user_id: str
+    workspace_id: str | None = None
     hypothesis: str
     product_area: str
 
@@ -39,6 +40,7 @@ async def start_run(request: RunRequest, background_tasks: BackgroundTasks):
         request.user_id,
         request.hypothesis,
         request.product_area,
+        request.workspace_id,
     )
     return {"run_id": run_id}
 
@@ -128,12 +130,13 @@ async def latest_run(user_id: str):
     if not run:
         return {"run_id": None, "status": "none", "brief": None, "sources": {}}
 
-    cache_key = f"latest-analysis:{user_id}:{run['id']}"
+    run_id = str(run["id"])
+    cache_key = f"latest-analysis:{user_id}:{run_id}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    base = Path(__file__).resolve().parents[1] / "storage" / "files" / run["id"]
+    base = Path(__file__).resolve().parents[1] / "storage" / "files" / run_id
     sources: dict[str, str] = {}
     for agent_key, file_path in AGENT_FILE_MAP.items():
         disk_path = base / file_path
@@ -141,7 +144,7 @@ async def latest_run(user_id: str):
             sources[agent_key] = disk_path.read_text(encoding="utf-8")
 
     payload = {
-        "run_id": run["id"],
+        "run_id": run_id,
         "status": run["status"],
         "brief": run.get("brief"),
         "sources": sources,

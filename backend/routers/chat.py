@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import List
 
 import logging
@@ -15,6 +16,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
 from agents.chat_activity import format_tool_activity, summarize_activity
+from agents.chat_session_streams import publish as publish_chat_session_event, subscribe as subscribe_chat_session, unsubscribe as unsubscribe_chat_session
 from agents.chat import (
     build_chat_tools,
     CHAT_SYSTEM_PROMPT,
@@ -26,14 +28,19 @@ from agents.chat_titles import stream_chat_title
 from db.supabase import (
     add_chat_message,
     create_chat_session,
+    create_macroscope_run,
+    get_workspace_integration_credentials,
     list_chat_messages,
     list_chat_sessions,
+    set_macroscope_workflow_id,
     touch_chat_session,
     update_chat_session_title,
 )
+from integrations.macroscope import MacroscopeClient, MacroscopeError, build_macroscope_callback_url
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
+DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles")
 
 
 class ChatMessageIn(BaseModel):
@@ -43,6 +50,7 @@ class ChatMessageIn(BaseModel):
 
 class ChatRequest(BaseModel):
     user_id: str
+    workspace_id: str | None = None
     messages: List[ChatMessageIn]
     session_id: str | None = None
     title: str | None = None
@@ -85,6 +93,141 @@ class ChatMessage(BaseModel):
     content: str
     sources_used: List[str] = []
     created_at: str | None = None
+
+
+def _serialize_chat_session(row: dict) -> ChatSession:
+    return ChatSession(
+        id=str(row.get("id", "")),
+        title=row.get("title"),
+        created_at=row.get("created_at").isoformat() if row.get("created_at") else None,
+        updated_at=row.get("updated_at").isoformat() if row.get("updated_at") else None,
+    )
+
+
+def _serialize_chat_message(row: dict) -> ChatMessage:
+    return ChatMessage(
+        id=str(row.get("id", "")),
+        role=str(row.get("role", "")),
+        content=str(row.get("content", "")),
+        sources_used=list(row.get("sources_used") or []),
+        created_at=row.get("created_at").isoformat() if row.get("created_at") else None,
+    )
+
+
+def _resolve_workspace_id(user_id: str, workspace_id: str | None) -> str:
+    return (workspace_id or user_id).strip()
+
+
+def _is_engineering_question(query: str) -> bool:
+    lowered = query.lower()
+    engineering_terms = (
+        "github",
+        "repo",
+        "repository",
+        "pull request",
+        "pr ",
+        "commit",
+        "git ",
+        "git history",
+        "codebase",
+        "code ",
+        "deploy",
+        "release",
+        "shipped",
+        "ship ",
+        "what changed",
+        "auth flow",
+        "authentication flow",
+        "bug causing",
+        "logs",
+        "feature flag",
+    )
+    return any(term in lowered for term in engineering_terms)
+
+
+def _build_no_chat_tools_message(unavailable_sources: list[str]) -> str:
+    if unavailable_sources:
+        joined = ", ".join(sorted(unavailable_sources))
+        return (
+            "No chat-runtime tools are available for this request yet. "
+            f"Connected but not runtime-enabled sources: {joined}. "
+            "Those integrations are connected in Signal, but chat still cannot query them directly."
+        )
+    return (
+        "No chat-capable integrations are connected yet. Connect one of the "
+        "available MCP-backed sources from the integrations page and try again."
+    )
+
+
+def _find_requested_unavailable_source(
+    query: str,
+    unavailable_sources: list[str],
+) -> str | None:
+    lowered = query.lower()
+    for source in unavailable_sources:
+        label = source.lower()
+        if label in lowered:
+            return source
+        if source == "Linear" and any(term in lowered for term in ("linear", "linear issues", "linear tickets")):
+            return source
+        if source == "GitHub" and "github" in lowered:
+            return source
+        if source == "Asana" and "asana" in lowered:
+            return source
+        if source == "monday.com" and ("monday" in lowered or "monday.com" in lowered):
+            return source
+        if source == "Sentry" and "sentry" in lowered:
+            return source
+        if source == "Typeform" and "typeform" in lowered:
+            return source
+    return None
+
+
+def _build_unavailable_source_message(source: str) -> str:
+    return (
+        f"{source} is connected in Signal, but chat cannot query it directly yet. "
+        f"The current {source} connection is managed through Airbyte for connect lifecycle only, "
+        "and runtime chat access has not been wired up yet."
+    )
+
+
+async def _dispatch_macroscope_chat(
+    workspace_id: str,
+    user_id: str,
+    session_id: str,
+    query: str,
+) -> None:
+    print(f"[Macroscope chat] dispatch workspace={workspace_id} session={session_id}")
+    credentials = await get_workspace_integration_credentials(workspace_id, "macroscope")
+    if not credentials:
+        raise MacroscopeError("Macroscope is not connected for this workspace.")
+
+    client = MacroscopeClient.from_credentials(credentials)
+    repo_hint = (
+        f"\nPreferred repo: {credentials.get('default_repo')}"
+        if credentials.get("default_repo")
+        else ""
+    )
+    run_id = await create_macroscope_run(
+        workspace_id,
+        user_id,
+        mode="chat",
+        query="pending",
+        chat_session_id=session_id,
+    )
+    enriched_query = (
+        "You are answering an engineering question inside Signal's PM chat.\n"
+        f"Signal request id: {run_id}\n"
+        "Focus on code search, git history, PRs, issues, releases, and other connected engineering tools."
+        f"{repo_hint}\n\nQuestion: {query}"
+    )
+    workflow_id = await client.trigger_query(
+        query=enriched_query,
+        webhook_url=build_macroscope_callback_url(),
+        timezone=DEFAULT_TIMEZONE,
+    )
+    await set_macroscope_workflow_id(run_id, workflow_id)
+    print(f"[Macroscope chat] queued workflow_id={workflow_id} session={session_id}")
 
 
 def _extract_chunk_text(chunk: object) -> str:
@@ -174,6 +317,11 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="last message must be from user")
 
     try:
+        workspace_id = _resolve_workspace_id(request.user_id, request.workspace_id)
+        macroscope_credentials = await get_workspace_integration_credentials(
+            workspace_id,
+            "macroscope",
+        )
         resolved_folder = request.folder_name
         if not resolved_folder:
             resolved_folder = await resolve_folder_from_query(
@@ -186,14 +334,45 @@ async def chat(request: ChatRequest):
             session_id = await create_chat_session(request.user_id, default_title)
             asyncio.create_task(_generate_and_persist_title(session_id, last.content))
 
-        tools, tool_to_source, connected_sources = await build_chat_tools(
+        await add_chat_message(session_id, "user", last.content)
+
+        if _is_engineering_question(last.content) and macroscope_credentials:
+            await _dispatch_macroscope_chat(
+                workspace_id,
+                request.user_id,
+                session_id,
+                last.content,
+            )
+            message_text = (
+                "Researching engineering context with Macroscope. "
+                "I’ll append the result to this thread when it’s ready."
+            )
+            await add_chat_message(session_id, "assistant", message_text, ["Macroscope"])
+            await touch_chat_session(session_id)
+            return ChatResponse(
+                message=message_text,
+                sources_used=["Macroscope"],
+                session_id=session_id,
+            )
+
+        tools, tool_to_source, connected_sources, unavailable_sources = await build_chat_tools(
             request.user_id, resolved_folder
         )
-        if not connected_sources:
-            message_text = (
-                "No chat-capable integrations are connected yet. Connect one of the "
-                "available MCP-backed sources from the integrations page and try again."
+        requested_unavailable_source = _find_requested_unavailable_source(
+            last.content,
+            unavailable_sources,
+        )
+        if requested_unavailable_source:
+            message_text = _build_unavailable_source_message(requested_unavailable_source)
+            await add_chat_message(session_id, "assistant", message_text, [])
+            await touch_chat_session(session_id)
+            return ChatResponse(
+                message=message_text,
+                sources_used=[],
+                session_id=session_id,
             )
+        if not connected_sources:
+            message_text = _build_no_chat_tools_message(unavailable_sources)
             await add_chat_message(session_id, "user", last.content)
             await add_chat_message(session_id, "assistant", message_text, [])
             await touch_chat_session(session_id)
@@ -202,8 +381,6 @@ async def chat(request: ChatRequest):
                 sources_used=[],
                 session_id=session_id,
             )
-
-        await add_chat_message(session_id, "user", last.content)
 
         model = init_chat_model(model="gpt-5.2", temperature=0.2)
         agent = create_agent(
@@ -261,6 +438,11 @@ async def chat_stream(request: ChatRequest):
     async def event_generator():
         session_id = request.session_id
         try:
+            workspace_id = _resolve_workspace_id(request.user_id, request.workspace_id)
+            macroscope_credentials = await get_workspace_integration_credentials(
+                workspace_id,
+                "macroscope",
+            )
             resolved_folder = request.folder_name
             if not resolved_folder:
                 resolved_folder = await resolve_folder_from_query(
@@ -275,14 +457,43 @@ async def chat_stream(request: ChatRequest):
             await add_chat_message(session_id, "user", last.content)
             yield f"data: {json.dumps({'type': 'thinking_start', 'session_id': session_id})}\n\n"
 
-            tools, tool_to_source, connected_sources = await build_chat_tools(
+            if _is_engineering_question(last.content) and macroscope_credentials:
+                yield f"data: {json.dumps({'type': 'activity_step', 'session_id': session_id, 'step_id': '1', 'label': 'Dispatching Macroscope engineering research', 'status': 'active'})}\n\n"
+                await _dispatch_macroscope_chat(
+                    workspace_id,
+                    request.user_id,
+                    session_id,
+                    last.content,
+                )
+                message_text = (
+                    "Researching engineering context with Macroscope. "
+                    "I’ll append the result to this thread when it’s ready."
+                )
+                await add_chat_message(session_id, "assistant", message_text, ["Macroscope"])
+                await touch_chat_session(session_id)
+                yield f"data: {json.dumps({'type': 'activity_step', 'session_id': session_id, 'step_id': '1', 'label': 'Dispatching Macroscope engineering research', 'status': 'complete'})}\n\n"
+                yield f"data: {json.dumps({'type': 'activity_complete', 'session_id': session_id, 'summary': 'Queued Macroscope engineering research', 'tool_count': 1})}\n\n"
+                yield f"data: {json.dumps({'type': 'final_response', 'session_id': session_id, 'message': message_text, 'sources_used': ['Macroscope']})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+                return
+
+            tools, tool_to_source, connected_sources, unavailable_sources = await build_chat_tools(
                 request.user_id, resolved_folder
             )
+            requested_unavailable_source = _find_requested_unavailable_source(
+                last.content,
+                unavailable_sources,
+            )
+            if requested_unavailable_source:
+                message_text = _build_unavailable_source_message(requested_unavailable_source)
+                await add_chat_message(session_id, "assistant", message_text, [])
+                await touch_chat_session(session_id)
+                yield f"data: {json.dumps({'type': 'activity_complete', 'session_id': session_id, 'summary': 'Checked connected sources', 'tool_count': 0})}\n\n"
+                yield f"data: {json.dumps({'type': 'final_response', 'session_id': session_id, 'message': message_text, 'sources_used': []})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+                return
             if not connected_sources:
-                message_text = (
-                    "No chat-capable integrations are connected yet. Connect one of the "
-                    "available MCP-backed sources from the integrations page and try again."
-                )
+                message_text = _build_no_chat_tools_message(unavailable_sources)
                 await add_chat_message(session_id, "assistant", message_text, [])
                 await touch_chat_session(session_id)
                 yield f"data: {json.dumps({'type': 'activity_complete', 'session_id': session_id, 'summary': 'Thought through the request', 'tool_count': 0})}\n\n"
@@ -405,7 +616,8 @@ async def chat_stream(request: ChatRequest):
 async def get_sessions(user_id: str):
     """List recent chat sessions for a user."""
     try:
-        return await list_chat_sessions(user_id)
+        rows = await list_chat_sessions(user_id)
+        return [_serialize_chat_session(row) for row in rows]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -438,10 +650,31 @@ async def stream_title(session_id: str):
     )
 
 
+@router.get("/sessions/{session_id}/events")
+async def stream_session_events(session_id: str):
+    """SSE stream of live chat session message updates."""
+
+    async def event_generator():
+        queue = subscribe_chat_session(session_id)
+        try:
+            while True:
+                event = await queue.get()
+                yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            unsubscribe_chat_session(session_id, queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.get("/sessions/{session_id}/messages", response_model=List[ChatMessage])
 async def get_messages(session_id: str):
     """List chat messages for a session."""
     try:
-        return await list_chat_messages(session_id)
+        rows = await list_chat_messages(session_id)
+        return [_serialize_chat_message(row) for row in rows]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

@@ -1,26 +1,77 @@
-"""Supabase client and database operations for Signal."""
+"""Database operations for Signal on plain Postgres/Ghost.
 
+This module intentionally keeps the historical filename to avoid a broad import
+rename while the storage backend moves away from Supabase.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Sequence
 
 from dotenv import load_dotenv
-from supabase import create_client, Client
 
-from integrations.registry import coerce_credentials
+from integrations.registry import coerce_credentials, get_provider
 
 load_dotenv()
 
-_client: Client | None = None
+AIRBYTE_METADATA_KEY = "_airbyte"
+PROVIDER_BACKEND_KEY = "_provider_backend"
+RUNTIME_READY_KEY = "_runtime_ready"
 
 
-def _get_client() -> Client:
-    global _client
-    if _client is None:
-        url = os.environ["SUPABASE_URL"]
-        key = os.environ["SUPABASE_KEY"]
-        _client = create_client(url, key)
-    return _client
+def _require_database_url() -> str:
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is not configured.")
+    return database_url
+
+
+def _connect():
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except ImportError as exc:
+        raise RuntimeError(
+            "psycopg is required for the Ghost/Postgres backend. "
+            "Install backend dependencies after updating requirements."
+        ) from exc
+    conn = psycopg.connect(_require_database_url(), row_factory=dict_row)
+    conn.autocommit = True
+    return conn
+
+
+def _fetch_all_sync(query: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(query, params or ())
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def _fetch_one_sync(query: str, params: Sequence[Any] | None = None) -> dict[str, Any] | None:
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(query, params or ())
+        row = cur.fetchone()
+    return dict(row) if row is not None else None
+
+
+def _execute_sync(query: str, params: Sequence[Any] | None = None) -> None:
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(query, params or ())
+
+
+async def fetch_all(query: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
+    return await asyncio.to_thread(_fetch_all_sync, query, params)
+
+
+async def fetch_one(query: str, params: Sequence[Any] | None = None) -> dict[str, Any] | None:
+    return await asyncio.to_thread(_fetch_one_sync, query, params)
+
+
+async def execute(query: str, params: Sequence[Any] | None = None) -> None:
+    await asyncio.to_thread(_execute_sync, query, params)
 
 
 async def store_integration_credentials(
@@ -30,7 +81,6 @@ async def store_integration_credentials(
     oauth_token: str | None = None,
 ) -> None:
     """Upsert structured credentials for a user integration."""
-    client = _get_client()
     token_value = oauth_token
     if token_value is None:
         simple_secret_keys = ("token", "api_key", "api_token", "pat_secret", "value")
@@ -39,20 +89,62 @@ async def store_integration_credentials(
             if isinstance(value, str) and value.strip():
                 token_value = value.strip()
                 break
-    client.table("user_integrations").upsert(
-        {
-            "user_id": user_id,
-            "integration_type": integration_type,
-            "oauth_token": token_value,
-            "credentials_json": credentials,
-            "connected_at": datetime.now(timezone.utc).isoformat(),
-        },
-        on_conflict="user_id,integration_type",
-    ).execute()
+    await execute(
+        """
+        INSERT INTO user_integrations (
+            user_id, integration_type, oauth_token, credentials_json, connected_at, updated_at
+        )
+        VALUES (%s, %s, %s, %s::jsonb, %s, %s)
+        ON CONFLICT (user_id, integration_type)
+        DO UPDATE SET
+            oauth_token = EXCLUDED.oauth_token,
+            credentials_json = EXCLUDED.credentials_json,
+            connected_at = EXCLUDED.connected_at,
+            updated_at = EXCLUDED.updated_at
+        """,
+        (
+            user_id,
+            integration_type,
+            token_value,
+            _json_dumps(credentials),
+            datetime.now(timezone.utc),
+            datetime.now(timezone.utc),
+        ),
+    )
+
+
+async def store_workspace_integration_credentials(
+    workspace_id: str,
+    integration_type: str,
+    credentials: dict[str, Any],
+    oauth_token: str | None = None,
+) -> None:
+    """Upsert structured credentials for a workspace integration."""
+    await execute(
+        """
+        INSERT INTO workspace_integrations (
+            workspace_id, integration_type, oauth_token, credentials_json, connected_at, updated_at
+        )
+        VALUES (%s, %s, %s, %s::jsonb, %s, %s)
+        ON CONFLICT (workspace_id, integration_type)
+        DO UPDATE SET
+            oauth_token = EXCLUDED.oauth_token,
+            credentials_json = EXCLUDED.credentials_json,
+            connected_at = EXCLUDED.connected_at,
+            updated_at = EXCLUDED.updated_at
+        """,
+        (
+            workspace_id,
+            integration_type,
+            oauth_token,
+            _json_dumps(credentials),
+            datetime.now(timezone.utc),
+            datetime.now(timezone.utc),
+        ),
+    )
 
 
 async def store_integration_token(user_id: str, integration_type: str, token: str) -> None:
-    """Upsert a legacy token-only integration value."""
     credentials = coerce_credentials(integration_type, token) or {"token": token}
     await store_integration_credentials(
         user_id,
@@ -63,18 +155,16 @@ async def store_integration_token(user_id: str, integration_type: str, token: st
 
 
 async def get_integration_token(user_id: str, integration_type: str) -> str | None:
-    """Retrieve a stored token for a specific integration, or None."""
-    client = _get_client()
-    result = (
-        client.table("user_integrations")
-        .select("oauth_token")
-        .eq("user_id", user_id)
-        .eq("integration_type", integration_type)
-        .maybe_single()
-        .execute()
+    row = await fetch_one(
+        """
+        SELECT oauth_token
+        FROM user_integrations
+        WHERE user_id = %s AND integration_type = %s
+        """,
+        (user_id, integration_type),
     )
-    if result.data:
-        return result.data["oauth_token"]
+    if row:
+        return row.get("oauth_token")
     return None
 
 
@@ -88,54 +178,152 @@ def _normalize_stored_credentials(
     return coerce_credentials(integration_type, oauth_token) or {}
 
 
+def _is_airbyte_metadata(credentials_json: Any) -> bool:
+    return isinstance(credentials_json, dict) and credentials_json.get(PROVIDER_BACKEND_KEY) == "airbyte_cloud"
+
+
+def _build_airbyte_record_payload(
+    airbyte: dict[str, Any],
+    *,
+    runtime_ready: bool = False,
+) -> dict[str, Any]:
+    return {
+        PROVIDER_BACKEND_KEY: "airbyte_cloud",
+        RUNTIME_READY_KEY: runtime_ready,
+        AIRBYTE_METADATA_KEY: airbyte,
+    }
+
+
 async def get_all_integration_credentials(user_id: str) -> dict[str, dict[str, Any]]:
-    """Return all integration credentials for a user as {integration_type: credentials}."""
-    client = _get_client()
-    result = (
-        client.table("user_integrations")
-        .select("integration_type,oauth_token,credentials_json")
-        .eq("user_id", user_id)
-        .execute()
+    rows = await fetch_all(
+        """
+        SELECT integration_type, oauth_token, credentials_json
+        FROM user_integrations
+        WHERE user_id = %s
+        """,
+        (user_id,),
     )
     data: dict[str, dict[str, Any]] = {}
-    for row in result.data or []:
+    for row in rows:
         integration_type = row["integration_type"]
+        credentials_json = row.get("credentials_json")
+        if _is_airbyte_metadata(credentials_json):
+            runtime_ready = bool(credentials_json.get(RUNTIME_READY_KEY))
+            provider = get_provider(integration_type)
+            if provider and provider.runtime_ready:
+                runtime_ready = True
+            if not runtime_ready:
+                continue
         data[integration_type] = _normalize_stored_credentials(
             integration_type,
             row.get("oauth_token"),
-            row.get("credentials_json"),
+            credentials_json,
         )
     return data
 
 
+async def list_integration_records(user_id: str) -> list[dict[str, Any]]:
+    return await fetch_all(
+        """
+        SELECT integration_type, oauth_token, credentials_json, connected_at, updated_at
+        FROM user_integrations
+        WHERE user_id = %s
+        """,
+        (user_id,),
+    )
+
+
+async def list_workspace_integration_records(workspace_id: str) -> list[dict[str, Any]]:
+    return await fetch_all(
+        """
+        SELECT integration_type, oauth_token, credentials_json, connected_at, updated_at
+        FROM workspace_integrations
+        WHERE workspace_id = %s
+        """,
+        (workspace_id,),
+    )
+
+
+async def get_workspace_integration_credentials(
+    workspace_id: str,
+    integration_type: str,
+) -> dict[str, Any] | None:
+    row = await fetch_one(
+        """
+        SELECT oauth_token, credentials_json
+        FROM workspace_integrations
+        WHERE workspace_id = %s AND integration_type = %s
+        """,
+        (workspace_id, integration_type),
+    )
+    if row is None:
+        return None
+    return _normalize_stored_credentials(
+        integration_type,
+        row.get("oauth_token"),
+        row.get("credentials_json"),
+    )
+
+
+async def store_airbyte_integration_connection(
+    user_id: str,
+    integration_type: str,
+    airbyte: dict[str, Any],
+    *,
+    runtime_ready: bool = False,
+) -> None:
+    await store_integration_credentials(
+        user_id,
+        integration_type,
+        _build_airbyte_record_payload(airbyte, runtime_ready=runtime_ready),
+        oauth_token=None,
+    )
+
+
 async def get_all_tokens(user_id: str) -> dict[str, str]:
-    """Return all integration tokens for a user as {integration_type: token}."""
-    client = _get_client()
-    result = (
-        client.table("user_integrations")
-        .select("integration_type,oauth_token")
-        .eq("user_id", user_id)
-        .execute()
+    rows = await fetch_all(
+        """
+        SELECT integration_type, oauth_token
+        FROM user_integrations
+        WHERE user_id = %s AND oauth_token IS NOT NULL
+        """,
+        (user_id,),
     )
     return {
         row["integration_type"]: row["oauth_token"]
-        for row in (result.data or [])
+        for row in rows
         if row.get("oauth_token")
     }
 
 
+async def get_workspace_connected_types(workspace_id: str) -> set[str]:
+    rows = await fetch_all(
+        """
+        SELECT integration_type
+        FROM workspace_integrations
+        WHERE workspace_id = %s
+        """,
+        (workspace_id,),
+    )
+    return {
+        row["integration_type"]
+        for row in rows
+        if isinstance(row.get("integration_type"), str)
+    }
+
+
 async def get_slack_tokens(user_id: str) -> list[dict]:
-    """Return Slack tokens for a user as [{team_id, token}]."""
-    client = _get_client()
-    result = (
-        client.table("user_integrations")
-        .select("integration_type,oauth_token")
-        .eq("user_id", user_id)
-        .like("integration_type", "slack:%")
-        .execute()
+    rows = await fetch_all(
+        """
+        SELECT integration_type, oauth_token
+        FROM user_integrations
+        WHERE user_id = %s
+          AND integration_type LIKE 'slack:%%'
+        """,
+        (user_id,),
     )
     tokens = []
-    for row in result.data or []:
+    for row in rows:
         integration_type = row.get("integration_type", "")
         team_id = integration_type.split("slack:")[-1] if "slack:" in integration_type else ""
         tokens.append({"team_id": team_id, "token": row.get("oauth_token")})
@@ -143,73 +331,137 @@ async def get_slack_tokens(user_id: str) -> list[dict]:
 
 
 async def create_pipeline_run(user_id: str, hypothesis: str, product_area: str) -> str:
-    """Insert a new pipeline_runs row and return its UUID."""
-    client = _get_client()
-    result = (
-        client.table("pipeline_runs")
-        .insert(
-            {
-                "user_id": user_id,
-                "hypothesis": hypothesis,
-                "product_area": product_area,
-                "status": "running",
-            }
-        )
-        .execute()
+    row = await fetch_one(
+        """
+        INSERT INTO pipeline_runs (user_id, hypothesis, product_area, status)
+        VALUES (%s, %s, %s, 'running')
+        RETURNING id
+        """,
+        (user_id, hypothesis, product_area),
     )
-    return result.data[0]["id"]
+    if not row or "id" not in row:
+        raise RuntimeError("Failed to create pipeline run.")
+    return str(row["id"])
+
+
+async def create_macroscope_run(
+    workspace_id: str,
+    user_id: str,
+    *,
+    mode: str,
+    query: str,
+    pipeline_run_id: str | None = None,
+    chat_session_id: str | None = None,
+    status: str = "queued",
+) -> str:
+    row = await fetch_one(
+        """
+        INSERT INTO macroscope_runs (
+            workspace_id, user_id, pipeline_run_id, chat_session_id, mode, query, status
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (workspace_id, user_id, pipeline_run_id, chat_session_id, mode, query, status),
+    )
+    if not row or "id" not in row:
+        raise RuntimeError("Failed to create Macroscope run.")
+    return str(row["id"])
+
+
+async def set_macroscope_workflow_id(run_id: str, workflow_id: str) -> None:
+    await execute(
+        """
+        UPDATE macroscope_runs
+        SET workflow_id = %s, status = 'running'
+        WHERE id = %s
+        """,
+        (workflow_id, run_id),
+    )
+
+
+async def get_macroscope_run(run_id: str) -> dict[str, Any] | None:
+    return await fetch_one(
+        "SELECT * FROM macroscope_runs WHERE id = %s",
+        (run_id,),
+    )
+
+
+async def get_macroscope_run_by_workflow_id(workflow_id: str) -> dict[str, Any] | None:
+    return await fetch_one(
+        "SELECT * FROM macroscope_runs WHERE workflow_id = %s",
+        (workflow_id,),
+    )
+
+
+async def complete_macroscope_run(workflow_id: str, response: str) -> None:
+    await execute(
+        """
+        UPDATE macroscope_runs
+        SET response = %s, status = 'complete', completed_at = %s
+        WHERE workflow_id = %s
+        """,
+        (response, datetime.now(timezone.utc), workflow_id),
+    )
+
+
+async def fail_macroscope_run(run_id: str, error: str, *, status: str = "failed") -> None:
+    await execute(
+        """
+        UPDATE macroscope_runs
+        SET error = %s, status = %s, completed_at = %s
+        WHERE id = %s
+        """,
+        (error, status, datetime.now(timezone.utc), run_id),
+    )
 
 
 async def update_pipeline_brief(run_id: str, brief: str, status: str) -> None:
-    """Write the final brief and update run status."""
-    client = _get_client()
-    client.table("pipeline_runs").update(
-        {
-            "brief": brief,
-            "status": status,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-        }
-    ).eq("id", run_id).execute()
+    await execute(
+        """
+        UPDATE pipeline_runs
+        SET brief = %s, status = %s, completed_at = %s
+        WHERE id = %s
+        """,
+        (brief, status, datetime.now(timezone.utc), run_id),
+    )
 
 
 async def get_pipeline_run(run_id: str) -> dict:
-    """Return the full pipeline_runs row for a given UUID."""
-    client = _get_client()
-    result = (
-        client.table("pipeline_runs")
-        .select("*")
-        .eq("id", run_id)
-        .single()
-        .execute()
+    row = await fetch_one(
+        "SELECT * FROM pipeline_runs WHERE id = %s",
+        (run_id,),
     )
-    return result.data
+    if row is None:
+        raise RuntimeError(f"Pipeline run {run_id} not found.")
+    return row
 
 
 async def get_latest_pipeline_run(user_id: str) -> dict | None:
-    """Return the most recent completed pipeline run for a user."""
-    client = _get_client()
-    result = (
-        client.table("pipeline_runs")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("status", "complete")
-        .order("completed_at", desc=True)
-        .limit(1)
-        .execute()
+    return await fetch_one(
+        """
+        SELECT *
+        FROM pipeline_runs
+        WHERE user_id = %s AND status = 'complete'
+        ORDER BY completed_at DESC
+        LIMIT 1
+        """,
+        (user_id,),
     )
-    rows = result.data or []
-    return rows[0] if rows else None
 
 
 async def create_chat_session(user_id: str, title: str | None = None) -> str:
-    """Create a chat session and return its UUID."""
-    client = _get_client()
-    result = (
-        client.table("chat_sessions")
-        .insert({"user_id": user_id, "title": title})
-        .execute()
+    row = await fetch_one(
+        """
+        INSERT INTO chat_sessions (user_id, title)
+        VALUES (%s, %s)
+        RETURNING id
+        """,
+        (user_id, title),
     )
-    return result.data[0]["id"]
+    if not row or "id" not in row:
+        raise RuntimeError("Failed to create chat session.")
+    return str(row["id"])
 
 
 async def add_chat_message(
@@ -218,72 +470,69 @@ async def add_chat_message(
     content: str,
     sources_used: list[str] | None = None,
 ) -> None:
-    """Insert a message into chat_messages."""
-    client = _get_client()
-    payload = {
-        "session_id": session_id,
-        "role": role,
-        "content": content,
-        "sources_used": sources_used or [],
-    }
-    client.table("chat_messages").insert(payload).execute()
+    await execute(
+        """
+        INSERT INTO chat_messages (session_id, role, content, sources_used)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (session_id, role, content, sources_used or []),
+    )
 
 
 async def touch_chat_session(session_id: str) -> None:
-    """Update chat session timestamp."""
-    client = _get_client()
-    client.table("chat_sessions").update(
-        {"updated_at": datetime.now(timezone.utc).isoformat()}
-    ).eq("id", session_id).execute()
+    await execute(
+        """
+        UPDATE chat_sessions
+        SET updated_at = %s
+        WHERE id = %s
+        """,
+        (datetime.now(timezone.utc), session_id),
+    )
 
 
 async def update_chat_session_title(session_id: str, title: str) -> None:
-    """Update the title for a chat session."""
-    client = _get_client()
-    client.table("chat_sessions").update({"title": title}).eq("id", session_id).execute()
+    await execute(
+        "UPDATE chat_sessions SET title = %s WHERE id = %s",
+        (title, session_id),
+    )
 
 
 async def list_chat_sessions(user_id: str, limit: int = 20) -> list[dict]:
-    """Return recent chat sessions for a user."""
-    client = _get_client()
-    result = (
-        client.table("chat_sessions")
-        .select("id,title,created_at,updated_at")
-        .eq("user_id", user_id)
-        .order("updated_at", desc=True)
-        .limit(limit)
-        .execute()
+    return await fetch_all(
+        """
+        SELECT id, title, created_at, updated_at
+        FROM chat_sessions
+        WHERE user_id = %s
+        ORDER BY updated_at DESC
+        LIMIT %s
+        """,
+        (user_id, limit),
     )
-    return result.data or []
 
 
 async def list_chat_messages(session_id: str, limit: int = 200) -> list[dict]:
-    """Return chat messages for a session."""
-    client = _get_client()
-    result = (
-        client.table("chat_messages")
-        .select("id,role,content,sources_used,created_at")
-        .eq("session_id", session_id)
-        .order("created_at", desc=False)
-        .limit(limit)
-        .execute()
+    return await fetch_all(
+        """
+        SELECT id, role, content, sources_used, created_at
+        FROM chat_messages
+        WHERE session_id = %s
+        ORDER BY created_at ASC
+        LIMIT %s
+        """,
+        (session_id, limit),
     )
-    return result.data or []
 
 
 async def get_user_id_for_slack_team(team_id: str) -> str | None:
-    """Return the Signal user_id associated with a Slack workspace install."""
-    client = _get_client()
-    result = (
-        client.table("user_integrations")
-        .select("user_id")
-        .eq("integration_type", f"slack:{team_id}")
-        .maybe_single()
-        .execute()
+    row = await fetch_one(
+        """
+        SELECT user_id
+        FROM user_integrations
+        WHERE integration_type = %s
+        """,
+        (f"slack:{team_id}",),
     )
-    if result.data:
-        return result.data["user_id"]
-    return None
+    return row.get("user_id") if row else None
 
 
 async def store_slack_message(
@@ -297,21 +546,26 @@ async def store_slack_message(
     is_dm: bool,
     raw: dict,
 ) -> None:
-    """Insert a Slack message into slack_messages."""
-    client = _get_client()
-    payload = {
-        "user_id": user_id,
-        "team_id": team_id,
-        "channel_id": channel_id,
-        "slack_user_id": slack_user_id,
-        "text": text,
-        "ts": ts,
-        "thread_ts": thread_ts,
-        "is_dm": is_dm,
-        "raw": raw,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    client.table("slack_messages").insert(payload).execute()
+    await execute(
+        """
+        INSERT INTO slack_messages (
+            user_id, team_id, channel_id, slack_user_id, text, ts, thread_ts, is_dm, raw, created_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+        """,
+        (
+            user_id,
+            team_id,
+            channel_id,
+            slack_user_id,
+            text,
+            ts,
+            thread_ts,
+            is_dm,
+            _json_dumps(raw),
+            datetime.now(timezone.utc),
+        ),
+    )
 
 
 async def query_slack_messages(
@@ -323,20 +577,37 @@ async def query_slack_messages(
     team_id: str | None = None,
     limit: int = 200,
 ) -> list[dict]:
-    """Query stored Slack messages for a user."""
-    client = _get_client()
-    query = client.table("slack_messages").select(
-        "id,team_id,channel_id,slack_user_id,text,ts,thread_ts,is_dm,created_at"
-    ).eq("user_id", user_id)
+    clauses = ["user_id = %s"]
+    params: list[Any] = [user_id]
     if team_id:
-        query = query.eq("team_id", team_id)
+        clauses.append("team_id = %s")
+        params.append(team_id)
     if channel_id:
-        query = query.eq("channel_id", channel_id)
+        clauses.append("channel_id = %s")
+        params.append(channel_id)
     if slack_user_id:
-        query = query.eq("slack_user_id", slack_user_id)
+        clauses.append("slack_user_id = %s")
+        params.append(slack_user_id)
     if since:
-        query = query.gte("created_at", since)
+        clauses.append("created_at >= %s")
+        params.append(since)
     if until:
-        query = query.lte("created_at", until)
-    result = query.order("created_at", desc=True).limit(limit).execute()
-    return result.data or []
+        clauses.append("created_at <= %s")
+        params.append(until)
+    params.append(limit)
+    return await fetch_all(
+        f"""
+        SELECT id, team_id, channel_id, slack_user_id, text, ts, thread_ts, is_dm, created_at
+        FROM slack_messages
+        WHERE {' AND '.join(clauses)}
+        ORDER BY created_at DESC
+        LIMIT %s
+        """,
+        tuple(params),
+    )
+
+
+def _json_dumps(value: Any) -> str:
+    import json
+
+    return json.dumps(value)

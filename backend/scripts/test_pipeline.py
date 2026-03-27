@@ -1,7 +1,7 @@
 """Smoke-test the full pipeline with a hardcoded hypothesis.
 
 Run from backend/ with: python -m scripts.test_pipeline
-Requires SUPABASE_URL, SUPABASE_KEY, ANTHROPIC_API_KEY in .env
+Requires DATABASE_URL and ANTHROPIC_API_KEY in .env
 """
 
 import asyncio

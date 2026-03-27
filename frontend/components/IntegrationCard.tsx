@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   connectIntegration,
+  startIntegrationOauth,
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@/lib/api";
@@ -10,6 +11,7 @@ import {
 interface Props {
   provider: IntegrationProvider;
   userId: string;
+  workspaceId?: string;
   state?: IntegrationStatus;
   onConnected: () => void;
   connectHref?: string;
@@ -36,6 +38,7 @@ function badgeClasses(label: string): string {
 export function IntegrationCard({
   provider,
   userId,
+  workspaceId,
   state,
   onConnected,
   connectHref,
@@ -61,11 +64,29 @@ export function IntegrationCard({
     setLoading(true);
     setError("");
     try {
+      if (provider.connection_mode === "oauth_redirect") {
+        const payload = await startIntegrationOauth(
+          userId,
+          provider.id,
+          window.location.href
+        );
+        const consentUrl = payload.consent_url ?? payload.consentUrl;
+        if (!consentUrl) {
+          throw new Error("Missing Airbyte consent URL.");
+        }
+        window.location.href = consentUrl;
+        return;
+      }
+      if (provider.connection_mode === "external_link") {
+        await connectIntegration(userId, provider.id, {}, { workspaceId });
+        onConnected();
+        return;
+      }
       if (provider.auth_mode === "token" && fieldCount === 1) {
         const field = provider.credential_schema[0];
-        await connectIntegration(userId, provider.id, form[field.name] ?? "");
+        await connectIntegration(userId, provider.id, form[field.name] ?? "", { workspaceId });
       } else {
-        await connectIntegration(userId, provider.id, form);
+        await connectIntegration(userId, provider.id, form, { workspaceId });
       }
       setForm({});
       onConnected();
@@ -79,6 +100,8 @@ export function IntegrationCard({
   const requiredMissing = provider.credential_schema.some(
     (field) => field.required && !(form[field.name] ?? "").trim()
   );
+  const runtimePending = connected && state?.runtime_ready === false;
+  const providerNote = state?.note ?? provider.connection_note ?? note;
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
@@ -119,6 +142,15 @@ export function IntegrationCard({
           >
             Connect
           </a>
+          {provider.connection_mode === "external_link" && (
+            <button
+              onClick={handleConnect}
+              disabled={loading}
+              className="px-4 py-2 border border-zinc-700 text-zinc-200 text-sm font-medium rounded-lg hover:border-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? "Saving..." : "Mark connected"}
+            </button>
+          )}
           {secondaryConnectHref && (
             <a
               href={secondaryConnectHref}
@@ -182,9 +214,14 @@ export function IntegrationCard({
         </>
       )}
 
-      {(provider.reason_unavailable || note) && (
+      {(provider.reason_unavailable || providerNote) && (
         <p className="text-zinc-500 text-xs">
-          {provider.reason_unavailable ?? note}
+          {provider.reason_unavailable ?? providerNote}
+        </p>
+      )}
+      {runtimePending && !provider.reason_unavailable && (
+        <p className="text-amber-300 text-xs">
+          Connected in Airbyte Cloud. Signal chat and pipeline still use the legacy integration runtime.
         </p>
       )}
       {error && <p className="text-red-400 text-sm">{error}</p>}

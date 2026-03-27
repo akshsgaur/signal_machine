@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import {
   createInsightsFolder,
   getIntegrations,
+  getChatSessionEventsUrl,
   getLinearDashboard,
   getLatestAnalysis,
   getRunAnalysisSource,
@@ -292,6 +293,7 @@ export default function WorkspacePage() {
   const folderUploadRef = useRef<HTMLInputElement | null>(null);
   const autoRunAttemptedRef = useRef(false);
   const activeTitleStreamsRef = useRef<Map<string, EventSource>>(new Map());
+  const activeChatSessionEventStreamRef = useRef<EventSource | null>(null);
   const activeDashboardStreamRef = useRef<EventSource | null>(null);
   const analysisDataRef = useRef<{
     run_id: string | null;
@@ -624,7 +626,8 @@ export default function WorkspacePage() {
       const runId = await startRun(
         user.id,
         "Analyze all product signals and customer feedback to surface key trends, risks, and opportunities",
-        "All"
+        "All",
+        user.id
       );
       setActiveRunId(runId);
 
@@ -744,7 +747,8 @@ export default function WorkspacePage() {
       const runId = await startRun(
         user.id,
         "Analyze all product signals and customer feedback to surface key trends, risks, and opportunities",
-        "All"
+        "All",
+        user.id
       );
       const es = new EventSource(getStreamUrl(runId));
       es.onmessage = (e) => {
@@ -961,6 +965,71 @@ export default function WorkspacePage() {
     []
   );
 
+  useEffect(() => {
+    if (!chatSessionId) {
+      activeChatSessionEventStreamRef.current?.close();
+      activeChatSessionEventStreamRef.current = null;
+      return;
+    }
+
+    activeChatSessionEventStreamRef.current?.close();
+    const es = new EventSource(getChatSessionEventsUrl(chatSessionId));
+    activeChatSessionEventStreamRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as {
+          type: "final_response";
+          session_id: string;
+          message: string;
+          sources_used: string[];
+          origin?: string;
+        };
+        if (message.type !== "final_response" || message.origin !== "macroscope") {
+          return;
+        }
+        setChatMessages((prev) => {
+          const alreadyExists = prev.some(
+            (item) =>
+              item.role === "assistant" &&
+              item.content === message.message &&
+              JSON.stringify(item.sources ?? []) === JSON.stringify(message.sources_used)
+          );
+          if (alreadyExists) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: `macroscope-${Date.now()}`,
+              role: "assistant",
+              content: message.message,
+              sources: message.sources_used,
+              status: "complete",
+            },
+          ];
+        });
+        void refreshChatSessions();
+      } catch {
+        return;
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      if (activeChatSessionEventStreamRef.current === es) {
+        activeChatSessionEventStreamRef.current = null;
+      }
+    };
+
+    return () => {
+      es.close();
+      if (activeChatSessionEventStreamRef.current === es) {
+        activeChatSessionEventStreamRef.current = null;
+      }
+    };
+  }, [chatSessionId, refreshChatSessions]);
+
   async function sendMessage() {
     const content = chatInput.trim();
     if (!content) return;
@@ -1022,6 +1091,7 @@ export default function WorkspacePage() {
         activeSessionId ?? undefined,
         undefined,
         activeFolder ?? undefined,
+        user.id,
         {
           onEvent: (event) => {
             if (event.type === "thinking_start") {

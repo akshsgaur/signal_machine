@@ -9,7 +9,7 @@ from typing import List
 import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 
-from db.supabase import _get_client
+from db.supabase import fetch_all, fetch_one
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
@@ -72,27 +72,31 @@ async def create_folder(user_id: str = Form(...), name: str = Form(...)):
     """Create a customer insights folder for a user."""
     if not name.strip():
         raise HTTPException(status_code=400, detail="Folder name is required")
-    client = _get_client()
-    result = (
-        client.table("insights_folders")
-        .insert({"user_id": user_id, "name": name.strip()})
-        .execute()
+    row = await fetch_one(
+        """
+        INSERT INTO insights_folders (user_id, name)
+        VALUES (%s, %s)
+        RETURNING id, user_id, name, created_at
+        """,
+        (user_id, name.strip()),
     )
-    return result.data[0]
+    if row is None:
+        raise HTTPException(status_code=500, detail="Failed to create folder")
+    return row
 
 
 @router.get("/folders/{user_id}")
 async def list_folders(user_id: str):
     """List folders for a user."""
-    client = _get_client()
-    result = (
-        client.table("insights_folders")
-        .select("id,name,created_at")
-        .eq("user_id", user_id)
-        .order("created_at", desc=False)
-        .execute()
+    return await fetch_all(
+        """
+        SELECT id, name, created_at
+        FROM insights_folders
+        WHERE user_id = %s
+        ORDER BY created_at ASC
+        """,
+        (user_id,),
     )
-    return result.data or []
 
 
 @router.get("/list/{user_id}")

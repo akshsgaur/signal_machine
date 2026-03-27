@@ -24,6 +24,11 @@ export type IntegrationProvider = {
   pipeline_enabled: boolean;
   builder_key?: string | null;
   connectable: boolean;
+  provider_backend: "signal_native" | "airbyte_cloud";
+  runtime_ready: boolean;
+  connection_mode: "inline_credentials" | "oauth_redirect" | "external_link";
+  connection_scope: "user" | "workspace";
+  connection_note?: string | null;
 };
 
 export type IntegrationCatalogGroup = {
@@ -37,6 +42,14 @@ export type IntegrationStatus = {
   label?: string;
   connectable?: boolean;
   pipeline_enabled?: boolean;
+  provider_backend?: "signal_native" | "airbyte_cloud";
+  runtime_ready?: boolean;
+  connection_scope?: "user" | "workspace";
+  note?: string;
+  airbyte_status?: string;
+  airbyte_connector_id?: string;
+  connected_at?: string;
+  updated_at?: string;
 };
 
 export type LinearDashboardResponse = {
@@ -114,18 +127,21 @@ export type LinearDashboardResponse = {
 export async function connectIntegration(
   userId: string,
   integrationType: string,
-  credentials: string | Record<string, string>
+  credentials: string | Record<string, string>,
+  options?: { workspaceId?: string }
 ): Promise<void> {
   const body =
     typeof credentials === "string"
       ? {
           user_id: userId,
           integration_type: integrationType,
+          workspace_id: options?.workspaceId ?? null,
           token: credentials,
         }
       : {
           user_id: userId,
           integration_type: integrationType,
+          workspace_id: options?.workspaceId ?? null,
           credentials,
         };
   const res = await fetch(`${API_URL}/integrations/connect`, {
@@ -145,9 +161,31 @@ export async function getIntegrationCatalog(): Promise<{
 }
 
 export async function getIntegrations(
-  userId: string
+  userId: string,
+  workspaceId?: string
 ): Promise<Record<string, IntegrationStatus>> {
-  const res = await fetch(`${API_URL}/integrations/${userId}`);
+  const url = new URL(`${API_URL}/integrations/${userId}`);
+  if (workspaceId) {
+    url.searchParams.set("workspace_id", workspaceId);
+  }
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function startIntegrationOauth(
+  userId: string,
+  providerId: string,
+  redirectUrl: string
+): Promise<{ consent_url?: string; consentUrl?: string }> {
+  const res = await fetch(`${API_URL}/integrations/connect/${providerId}/oauth/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: userId,
+      redirect_url: redirectUrl,
+    }),
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -188,13 +226,15 @@ export async function getCodeSessionUrl(
 export async function startRun(
   userId: string,
   hypothesis: string,
-  productArea: string
+  productArea: string,
+  workspaceId?: string
 ): Promise<string> {
   const res = await fetch(`${API_URL}/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user_id: userId,
+      workspace_id: workspaceId ?? null,
       hypothesis,
       product_area: productArea,
     }),
@@ -213,13 +253,15 @@ export async function sendChat(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   sessionId?: string,
   title?: string,
-  folderName?: string
+  folderName?: string,
+  workspaceId?: string
 ): Promise<{ message: string; sources_used: string[]; session_id: string }> {
   const res = await fetch(`${API_URL}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user_id: userId,
+      workspace_id: workspaceId ?? null,
       messages,
       session_id: sessionId ?? null,
       title: title ?? null,
@@ -266,6 +308,7 @@ export async function streamChat(
   sessionId?: string,
   title?: string,
   folderName?: string,
+  workspaceId?: string,
   handlers?: StreamChatHandlers
 ): Promise<void> {
   const res = await fetch(`${API_URL}/chat/stream`, {
@@ -273,6 +316,7 @@ export async function streamChat(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user_id: userId,
+      workspace_id: workspaceId ?? null,
       messages,
       session_id: sessionId ?? null,
       title: title ?? null,
@@ -337,6 +381,10 @@ export async function listChatMessages(
 
 export function getChatTitleStreamUrl(sessionId: string): string {
   return `${API_URL}/chat/sessions/${sessionId}/title-stream`;
+}
+
+export function getChatSessionEventsUrl(sessionId: string): string {
+  return `${API_URL}/chat/sessions/${sessionId}/events`;
 }
 
 export async function getLatestAnalysis(

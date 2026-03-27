@@ -11,6 +11,9 @@ from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
+from db.supabase import PROVIDER_BACKEND_KEY
+from integrations.airbyte_runtime import AirbyteLinearHostedClient
+
 
 def _get_secret(credentials: dict[str, Any] | str, *keys: str) -> str:
     if isinstance(credentials, str):
@@ -195,6 +198,21 @@ def build_tableau_client(credentials: dict[str, Any] | str) -> MultiServerMCPCli
 
 def create_mcp_client(provider_id: str, credentials: dict[str, Any] | str) -> MultiServerMCPClient | None:
     """Build an MCP client for a supported provider."""
+    if (
+        provider_id == "linear"
+        and isinstance(credentials, dict)
+        and credentials.get(PROVIDER_BACKEND_KEY) == "airbyte_cloud"
+    ):
+        airbyte = credentials.get("_airbyte", {})
+        external_user_id = airbyte.get("workspace_name")
+        connector_id = airbyte.get("connector_id")
+        if not isinstance(external_user_id, str) or not external_user_id.strip():
+            raise ValueError("Missing Airbyte external user id for Linear runtime.")
+        return AirbyteLinearHostedClient(
+            external_user_id.strip(),
+            connector_id.strip() if isinstance(connector_id, str) and connector_id.strip() else None,
+        )
+
     builders = {
         "aha": build_aha_client,
         "amplitude": build_amplitude_client,

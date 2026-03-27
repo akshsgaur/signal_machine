@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Header, HTTPException
 
-from db.supabase import _get_client
+from db.supabase import fetch_all
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -23,28 +23,14 @@ async def users_summary(x_admin_key: str | None = Header(default=None)):
     """Return a compact summary of users, integrations, runs, and chat activity."""
     _require_admin_key(x_admin_key)
 
-    client = _get_client()
-
-    integrations = (
-        client.table("user_integrations")
-        .select("user_id,integration_type")
-        .execute()
-        .data
-        or []
+    integrations = await fetch_all(
+        "SELECT user_id, integration_type FROM user_integrations"
     )
-    runs = (
-        client.table("pipeline_runs")
-        .select("user_id,status,created_at,completed_at")
-        .execute()
-        .data
-        or []
+    runs = await fetch_all(
+        "SELECT user_id, status, created_at, completed_at FROM pipeline_runs"
     )
-    chats = (
-        client.table("chat_sessions")
-        .select("user_id,created_at,updated_at")
-        .execute()
-        .data
-        or []
+    chats = await fetch_all(
+        "SELECT user_id, created_at, updated_at FROM chat_sessions"
     )
 
     summary = defaultdict(

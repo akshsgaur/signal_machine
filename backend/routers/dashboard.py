@@ -12,8 +12,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from cache.store import cache
-from db.supabase import get_all_tokens
-from integrations.connections import build_linear_client
+from db.supabase import get_all_integration_credentials
+from integrations.connections import create_mcp_client
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 logger = logging.getLogger(__name__)
@@ -433,14 +433,16 @@ async def get_linear_dashboard(user_id: str, fresh: bool = False):
             if cached is not None:
                 return cached
 
-        tokens = await get_all_tokens(user_id)
-        linear_token = tokens.get("linear")
+        credentials = await get_all_integration_credentials(user_id)
+        linear_credentials = credentials.get("linear")
         refreshed_at = datetime.now(timezone.utc).isoformat()
-        if not linear_token:
+        if not linear_credentials:
             payload = {"connected": False, "refreshed_at": refreshed_at}
             return cache.set(cache_key, payload, ttl_seconds=LINEAR_DASHBOARD_CACHE_TTL_SECONDS)
 
-        client = build_linear_client(linear_token)
+        client = create_mcp_client("linear", linear_credentials)
+        if client is None:
+            raise RuntimeError("Linear runtime client is unavailable.")
         tools = await client.get_tools()
         tools_by_name = {tool.name: tool for tool in tools}
 
