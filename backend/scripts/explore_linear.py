@@ -11,8 +11,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from integrations.connections import build_linear_client
 
-LINEAR_KEY = "os.getenv("LINEAR_API_KEY")"
-
 
 def _dump(label: str, result):
     print(f"\n{'='*60}")
@@ -46,7 +44,11 @@ async def call(tools_by_name, name, **kwargs):
 
 
 async def main():
-    client = build_linear_client(LINEAR_KEY)
+    linear_key = os.getenv("LINEAR_API_KEY")
+    if not linear_key:
+        raise RuntimeError("Set LINEAR_API_KEY before running this script.")
+
+    client = build_linear_client(linear_key)
     tools = await client.get_tools()
     by_name = {t.name: t for t in tools}
     print(f"Loaded {len(tools)} tools: {list(by_name.keys())}\n")
